@@ -35,6 +35,12 @@ DATABASE_URL=sqlite:///./stock_agent.db
 python -m uvicorn app.main:app --reload
 ```
 
+On this Windows workspace, use the bundled Python directly:
+
+```powershell
+.\.python311\python.exe -m uvicorn app.main:app --reload
+```
+
 Open `http://127.0.0.1:8000` in your browser.
 
 ## API
