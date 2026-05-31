@@ -32,7 +32,7 @@ DATABASE_URL=sqlite:///./stock_agent.db
 ## Run
 
 ```bash
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload
 ```
 
 Open `http://127.0.0.1:8000` in your browser.
