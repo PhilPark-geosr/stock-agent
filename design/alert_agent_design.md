@@ -286,78 +286,121 @@ graph TD;
 대략적인 코드:
 
 ```python
+# app/agent_graph.py
 from langgraph.graph import END, StateGraph
 
-
-graph = StateGraph(AnalysisGraphState)
-
-graph.add_node("split_conditions", split_conditions)
-graph.add_node("custom_rule_agent", run_custom_rule_agent)
-graph.add_node("main_analysis_agent", run_main_analysis_agent)
-
-graph.set_entry_point("split_conditions")
-graph.add_conditional_edges(
-    "split_conditions",
-    should_run_custom_rule_agent,
-    {
-        "custom": "custom_rule_agent",
-        "main": "main_analysis_agent",
-    },
-)
-graph.add_edge("custom_rule_agent", "main_analysis_agent")
-graph.add_edge("main_analysis_agent", END)
-
-compiled_graph = graph.compile()
-```
-
-노드 함수는 아래처럼 작성한다.
-
-```python
-def split_conditions(state: AnalysisGraphState) -> dict:
-    system_conditions = []
-    custom_conditions = []
-
-    for condition in state["alert_conditions"]:
-        if condition.kind == "system":
-            system_conditions.append(condition)
-        elif condition.kind == "custom":
-            custom_conditions.append(condition)
-
-    return {
-        "system_conditions": system_conditions,
-        "custom_conditions": custom_conditions,
-    }
+from app.alert_conditions import AlertConditionUnion
+from app.schemas import AnalysisResult, MarketDataSnapshot, model_to_dict, parse_model_json
 
 
-def should_run_custom_rule_agent(state: AnalysisGraphState) -> str:
-    if state.get("custom_conditions"):
-        return "custom"
-    return "main"
+class MainAnalysisAgent:
+    def __init__(self, *, gemini_client, custom_rule_agent):
+        self.gemini_client = gemini_client
+        self.custom_rule_agent = custom_rule_agent
+        self.graph = self._build_graph()
 
-
-def run_custom_rule_agent(state: AnalysisGraphState) -> dict:
-    contexts = []
-
-    for condition in state.get("custom_conditions", []):
-        context = custom_rule_agent.build_context(
-            target_symbol=state["market_data"].symbol,
-            condition_id=condition.id,
-            user_rule=condition.user_rule,
+    def analyze(
+        self,
+        market_data: MarketDataSnapshot,
+        alert_conditions: list[AlertConditionUnion],
+    ) -> AnalysisResult:
+        result = self.graph.invoke(
+            {
+                "market_data": market_data,
+                "alert_conditions": alert_conditions,
+            }
         )
-        contexts.append(context.model_dump(mode="json"))
+        return result["analysis_result"]
 
-    return {"custom_contexts": contexts}
+    def _build_graph(self):
+        graph = StateGraph(AnalysisGraphState)
 
+        graph.add_node("split_conditions", self._split_conditions)
+        graph.add_node("custom_rule_agent", self._run_custom_rule_agent)
+        graph.add_node("main_analysis_agent", self._run_main_analysis_agent)
 
-def run_main_analysis_agent(state: AnalysisGraphState) -> dict:
-    result = main_analysis_agent.run(
-        market_data=state["market_data"],
-        system_conditions=state.get("system_conditions", []),
-        custom_conditions=state.get("custom_conditions", []),
-        custom_contexts=state.get("custom_contexts", []),
-    )
+        graph.set_entry_point("split_conditions")
+        graph.add_conditional_edges(
+            "split_conditions",
+            self._should_run_custom_rule_agent,
+            {
+                "custom": "custom_rule_agent",
+                "main": "main_analysis_agent",
+            },
+        )
+        graph.add_edge("custom_rule_agent", "main_analysis_agent")
+        graph.add_edge("main_analysis_agent", END)
 
-    return {"analysis_result": result}
+        return graph.compile()
+
+    def _split_conditions(self, state: AnalysisGraphState) -> dict:
+        system_conditions = []
+        custom_conditions = []
+
+        for condition in state["alert_conditions"]:
+            if condition.kind == "system":
+                system_conditions.append(condition)
+            elif condition.kind == "custom":
+                custom_conditions.append(condition)
+
+        return {
+            "system_conditions": system_conditions,
+            "custom_conditions": custom_conditions,
+        }
+
+    def _should_run_custom_rule_agent(self, state: AnalysisGraphState) -> str:
+        if state.get("custom_conditions"):
+            return "custom"
+        return "main"
+
+    def _run_custom_rule_agent(self, state: AnalysisGraphState) -> dict:
+        market_data = state["market_data"]
+        contexts = []
+
+        for condition in state.get("custom_conditions", []):
+            context = self.custom_rule_agent.build_context(
+                target_symbol=market_data.symbol,
+                condition_id=condition.id,
+                user_rule=condition.user_rule,
+            )
+            contexts.append(context.model_dump(mode="json"))
+
+        return {"custom_contexts": contexts}
+
+    def _run_main_analysis_agent(self, state: AnalysisGraphState) -> dict:
+        payload = {
+            "market_data": model_to_dict(state["market_data"]),
+            "system_alert_conditions": [
+                condition.model_dump(mode="json")
+                for condition in state.get("system_conditions", [])
+            ],
+            "custom_alert_conditions": [
+                condition.model_dump(mode="json")
+                for condition in state.get("custom_conditions", [])
+            ],
+            "custom_contexts": state.get("custom_contexts", []),
+        }
+
+        prompt = f"""
+너는 주식 분석 메인 에이전트다.
+
+입력된 market_data를 분석하고,
+system_alert_conditions와 custom_alert_conditions 중 충족된 조건이 있는지 판단해라.
+
+custom_alert_conditions는 custom_contexts를 참고해서 판단한다.
+matched_alert_conditions에는 반드시 입력받은 condition id만 사용한다.
+존재하지 않는 condition id를 만들지 마라.
+
+반드시 AnalysisResult JSON 스키마로만 응답해라.
+
+payload:
+{payload}
+"""
+
+        raw_json = self.gemini_client.generate_json(prompt)
+        analysis_result = parse_model_json(AnalysisResult, raw_json)
+
+        return {"analysis_result": analysis_result}
 ```
 
 ## Main Agent 입력
