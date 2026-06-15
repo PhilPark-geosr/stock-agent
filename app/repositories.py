@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -98,3 +98,31 @@ class AnalysisRepository:
         self.db.commit()
         self.db.refresh(result)
         return result
+
+    def mark_alert_sent(self, result: AnalysisResult) -> AnalysisResult:
+        result.alert_sent_at = datetime.now(timezone.utc)
+        self.db.add(result)
+        self.db.commit()
+        self.db.refresh(result)
+        return result
+
+    def has_sent_alert_for_conditions(self, symbol: str, triggered_alerts: list[str]) -> bool:
+        normalized = normalize_symbol(symbol)
+        conditions_key = tuple(sorted(triggered_alerts or []))
+        if not conditions_key:
+            return False
+
+        statement = (
+            select(AnalysisResult)
+            .where(AnalysisResult.symbol == normalized)
+            .where(AnalysisResult.alert_sent_at.is_not(None))
+        )
+        for row in self.db.scalars(statement):
+            if tuple(sorted(row.triggered_alerts or [])) == conditions_key:
+                return True
+        return False
+
+    def count_by_symbol(self, symbol: str) -> int:
+        normalized = normalize_symbol(symbol)
+        rows = self.db.scalars(select(AnalysisResult).where(AnalysisResult.symbol == normalized))
+        return sum(1 for _ in rows)

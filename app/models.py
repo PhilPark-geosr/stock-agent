@@ -36,4 +36,5 @@ class AnalysisResult(Base):
     should_alert: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     triggered_alerts: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     alert_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     raw_result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)

@@ -80,7 +80,16 @@
         try {
           const response = await fetch(`/stocks/${encodeURIComponent(symbol)}/analysis/latest`);
           const body = await response.json();
-          result.textContent = JSON.stringify(body, null, 2);
+          if (!response.ok) {
+            result.textContent = `Error ${response.status}: ${body.detail || JSON.stringify(body)}`;
+            return;
+          }
+          const lines = [
+            body.should_alert ? "카카오 알림: 전송 시도됨 (나와의 채팅 확인)" : "카카오 알림: 조건 미충족",
+            "",
+            JSON.stringify(body, null, 2),
+          ];
+          result.textContent = lines.join("\n");
         } catch (error) {
           result.textContent = `Lookup failed: ${error}`;
         }

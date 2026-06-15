@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>카카오 연동</title>
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 720px; margin: 48px auto; padding: 0 20px; }
+      .ok { color: #116329; }
+      .err { color: #b42318; }
+      pre { background: #f6f7f9; border: 1px solid #d7dde5; padding: 12px; overflow: auto; }
+      a { color: #1f6feb; }
+    </style>
+  </head>
+  <body>
+    <h1>카카오 연동</h1>
+    {% if success %}
+      <p class="ok">{{ message }}</p>
+      <h2>access_token</h2>
+      <pre>{{ access_token }}</pre>
+      <h2>refresh_token</h2>
+      <pre>{{ refresh_token }}</pre>
+      <p><a href="/">대시보드로 돌아가기</a></p>
+    {% else %}
+      <p class="err">{{ message }}</p>
+      <p><a href="/auth/kakao/login">다시 로그인</a></p>
+    {% endif %}
+  </body>
+</html>

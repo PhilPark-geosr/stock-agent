@@ -1,16 +1,24 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.agent import AgentConfigurationError, AnalysisAgentError
 from app.database import get_db
+from app.kakao_auth import (
+    KakaoAuthError,
+    build_authorize_url,
+    exchange_code_for_token,
+    persist_tokens_to_env,
+)
 from app.market_data import MarketDataError
 from app.repositories import WatchlistRepository
 from app.schemas import AnalysisResultRead, WatchlistCreate, WatchlistItemRead
-from app.services import AnalysisProvider, get_analysis_service
+from app.kakao_notify import KakaoNotifyError
+from app.scheduler import run_scheduled_batch
+from app.services import AnalysisProvider, ScheduledBatchResult, get_analysis_service
 
 
 router = APIRouter()
@@ -31,6 +39,65 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get("/auth/kakao/login")
+def kakao_login():
+    try:
+        return RedirectResponse(build_authorize_url(), status_code=status.HTTP_302_FOUND)
+    except KakaoAuthError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+
+@router.get("/auth/kakao/callback", response_class=HTMLResponse)
+def kakao_callback(
+    request: Request,
+    code: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    error_description: str | None = Query(default=None),
+):
+    if error:
+        return templates.TemplateResponse(
+            request,
+            "kakao_callback.html",
+            {
+                "success": False,
+                "message": error_description or error,
+                "access_token": None,
+                "refresh_token": None,
+            },
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if not code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="code is required")
+
+    try:
+        token_payload = exchange_code_for_token(code)
+        persist_tokens_to_env(token_payload)
+    except KakaoAuthError as exc:
+        hint = ""
+        if "KOE010" in str(exc) or "invalid_client" in str(exc):
+            hint = (
+                " REST API 키에 클라이언트 시크릿이 켜져 있으면 .env에 "
+                "KAKAO_CLIENT_SECRET= 을 넣거나, 콘솔에서 시크릿을 끄세요."
+            )
+        return templates.TemplateResponse(
+            request,
+            "kakao_callback.html",
+            {"success": False, "message": str(exc) + hint, "access_token": None, "refresh_token": None},
+            status_code=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "kakao_callback.html",
+        {
+            "success": True,
+            "message": ".env에 아래 토큰을 저장했습니다. access_token은 만료되면 refresh_token으로 갱신하세요.",
+            "access_token": token_payload.get("access_token"),
+            "refresh_token": token_payload.get("refresh_token"),
+        },
+    )
+
+
 @router.post("/watchlist", response_model=WatchlistItemRead, status_code=status.HTTP_201_CREATED)
 def add_watchlist_item(payload: WatchlistCreate, db: Session = Depends(get_db)):
     return WatchlistRepository(db).add(payload.symbol)
@@ -49,6 +116,17 @@ def delete_watchlist_item(symbol: str, db: Session = Depends(get_db)):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post("/scheduler/run", response_model=ScheduledBatchResult)
+def run_scheduler(
+    force: bool = Query(default=False, description="Skip market-hours check"),
+    db: Session = Depends(get_db),
+):
+    try:
+        return run_scheduled_batch(db, ignore_market_hours=force)
+    except KakaoNotifyError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
 @router.get("/stocks/{symbol}/analysis/latest", response_model=AnalysisResultRead)
 def get_latest_analysis(
     symbol: str,
@@ -61,5 +139,7 @@ def get_latest_analysis(
     except MarketDataError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     except (AnalysisAgentError, AgentConfigurationError) as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    except KakaoNotifyError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return result

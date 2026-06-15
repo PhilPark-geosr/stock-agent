@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from app.repositories import AnalysisRepository
+from app.schemas import AnalysisResult
 
 
 def test_health(client):
@@ -23,7 +26,9 @@ def test_watchlist_crud(client):
     assert not any(item["symbol"] == "MSFT" for item in client.get("/watchlist").json())
 
 
-def test_latest_analysis_returns_cached_result_without_external_calls(client, db_session, market_data, agent):
+def test_latest_analysis_returns_cached_result_without_external_calls(
+    client, db_session, market_data, agent, alert_notifier
+):
     AnalysisRepository(db_session).save(
         symbol="005930.KS",
         overall_judgment="neutral",
@@ -46,9 +51,67 @@ def test_latest_analysis_returns_cached_result_without_external_calls(client, db
     assert body["raw_result"] == {"summary": "cached result"}
     assert market_data.calls == []
     assert agent.calls == []
+    assert alert_notifier.messages == []
 
 
-def test_latest_analysis_cache_miss_uses_fake_market_data_and_agent(client, db_session, market_data, agent):
+def test_latest_analysis_sends_pending_alert_for_cached_result(client, db_session, alert_notifier):
+    AnalysisRepository(db_session).save(
+        symbol="005930.KS",
+        overall_judgment="상승",
+        summary="cached alert",
+        key_reasons=[],
+        risk_factors=[],
+        support_levels={},
+        should_alert=True,
+        triggered_alerts=["price_move_abs_gte_3_percent"],
+        alert_reason="캐시된 알림 사유입니다.",
+        raw_result={},
+    )
+
+    response = client.get("/stocks/005930.KS/analysis/latest")
+
+    assert response.status_code == 200
+    assert alert_notifier.messages == ["캐시된 알림 사유입니다."]
+    stored = AnalysisRepository(db_session).get_latest("005930.KS")
+    assert stored.alert_sent_at is not None
+
+    client.get("/stocks/005930.KS/analysis/latest")
+    assert alert_notifier.messages == ["캐시된 알림 사유입니다."]
+
+
+def test_latest_analysis_sends_kakao_alert_reason_only_when_alert_triggered(
+    client, agent, alert_notifier
+):
+    agent.result = AnalysisResult(
+        symbol="005930.KS",
+        analysis_time=datetime(2026, 5, 30, 1, tzinfo=timezone.utc),
+        data_time=datetime(2026, 5, 30, tzinfo=timezone.utc),
+        verdict="상승",
+        summary="ignored for kakao",
+        key_reasons=["ignored"],
+        risk_factors=[],
+        indicators={"latest_close": 72000},
+        alert_triggered=True,
+        matched_alert_conditions=["price_move_abs_gte_3_percent"],
+        alert_reason="주가가 10% 이상 급등했습니다.",
+    )
+
+    response = client.get("/stocks/005930.KS/analysis/latest")
+
+    assert response.status_code == 200
+    assert alert_notifier.messages == ["주가가 10% 이상 급등했습니다."]
+
+
+def test_latest_analysis_does_not_send_kakao_when_alert_not_triggered(client, alert_notifier):
+    response = client.get("/stocks/005930.KS/analysis/latest")
+
+    assert response.status_code == 200
+    assert alert_notifier.messages == []
+
+
+def test_latest_analysis_cache_miss_uses_fake_market_data_and_agent(
+    client, db_session, market_data, agent, alert_notifier
+):
     response = client.get("/stocks/005930.KS/analysis/latest")
 
     assert response.status_code == 200
