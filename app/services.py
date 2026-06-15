@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Protocol
 
@@ -10,14 +11,22 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.agent import AnalysisAgent, GeminiAnalysisAgent
-from app.alert_config import alert_window_settings
 from app.database import get_db
 from app.kakao_notify import AlertNotifier, KakaoNotifyError, get_default_alert_notifier
 from app.market_data import MarketDataProvider, YFinanceMarketDataProvider
 from app.models import AnalysisResult as StoredAnalysisResult
-from app.repositories import AnalysisRepository, normalize_symbol
+from app.repositories import AnalysisRepository, WatchlistRepository, normalize_symbol
+from app.scheduler_config import scheduler_settings
 from app.schemas import model_to_dict
 from app.trading_window import is_alert_window
+
+
+@dataclass
+class ScheduledBatchResult:
+    ran: bool
+    symbols_analyzed: list[str] = field(default_factory=list)
+    symbols_failed: list[str] = field(default_factory=list)
+    skipped_reason: str | None = None
 
 
 class AnalysisProvider(Protocol):
@@ -30,12 +39,14 @@ class AnalysisService:
         self,
         *,
         analysis_repository: AnalysisRepository,
+        watchlist_repository: WatchlistRepository,
         market_data_provider: MarketDataProvider,
         agent: AnalysisAgent,
         alert_notifier: AlertNotifier | None = None,
         now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.analysis_repository = analysis_repository
+        self.watchlist_repository = watchlist_repository
         self.market_data_provider = market_data_provider
         self.agent = agent
         self.alert_notifier = alert_notifier or get_default_alert_notifier()
@@ -51,11 +62,20 @@ class AnalysisService:
             self._try_send_pending_alert(latest)
             return latest
 
+        stored = self.analyze_and_store(normalized_symbol)
+        self._try_send_pending_alert(stored)
+        return stored
+
+    def analyze_and_store(self, symbol: str) -> StoredAnalysisResult:
+        normalized_symbol = normalize_symbol(symbol)
+        if not normalized_symbol:
+            raise ValueError("symbol is required")
+
         market_data = self.market_data_provider.fetch(normalized_symbol)
         agent_result = self.agent.analyze(market_data)
         raw_result = model_to_dict(agent_result)
 
-        stored = self.analysis_repository.save(
+        return self.analysis_repository.save(
             symbol=agent_result.symbol,
             data_timestamp=agent_result.data_time,
             overall_judgment=agent_result.verdict,
@@ -68,14 +88,34 @@ class AnalysisService:
             alert_reason=agent_result.alert_reason,
             raw_result=raw_result,
         )
-        self._try_send_pending_alert(stored)
-        return stored
+
+    def run_scheduled_batch(self, *, now: datetime | None = None) -> ScheduledBatchResult:
+        items = self.watchlist_repository.list()
+        if not items:
+            return ScheduledBatchResult(ran=True, skipped_reason="empty_watchlist")
+
+        analyzed: list[str] = []
+        failed: list[str] = []
+        for item in items:
+            try:
+                stored = self.analyze_and_store(item.symbol)
+                self._try_send_pending_alert(stored, now=now)
+                analyzed.append(item.symbol)
+            except Exception:
+                logger.exception("Scheduled analysis failed for %s", item.symbol)
+                failed.append(item.symbol)
+
+        return ScheduledBatchResult(
+            ran=True,
+            symbols_analyzed=analyzed,
+            symbols_failed=failed,
+        )
 
     def _should_send_alert(self, stored: StoredAnalysisResult, *, now: datetime | None = None) -> bool:
         if not stored.should_alert or not stored.alert_reason:
             return False
 
-        settings = alert_window_settings()
+        settings = scheduler_settings()
         current = now or self.now_provider()
         if not is_alert_window(
             current,
@@ -121,6 +161,7 @@ def build_analysis_service(
 ) -> AnalysisService:
     return AnalysisService(
         analysis_repository=AnalysisRepository(db),
+        watchlist_repository=WatchlistRepository(db),
         market_data_provider=market_data_provider or YFinanceMarketDataProvider(),
         agent=agent or GeminiAnalysisAgent(),
         alert_notifier=alert_notifier or get_default_alert_notifier(),

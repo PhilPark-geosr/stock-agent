@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
+
+os.environ.setdefault("SCHEDULER_ENABLED", "false")
 
 import pytest
 from fastapi.testclient import TestClient

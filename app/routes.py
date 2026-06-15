@@ -17,7 +17,8 @@ from app.market_data import MarketDataError
 from app.repositories import WatchlistRepository
 from app.schemas import AnalysisResultRead, WatchlistCreate, WatchlistItemRead
 from app.kakao_notify import KakaoNotifyError
-from app.services import AnalysisProvider, get_analysis_service
+from app.scheduler import run_scheduled_batch
+from app.services import AnalysisProvider, ScheduledBatchResult, get_analysis_service
 
 
 router = APIRouter()
@@ -113,6 +114,17 @@ def delete_watchlist_item(symbol: str, db: Session = Depends(get_db)):
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="watchlist item not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/scheduler/run", response_model=ScheduledBatchResult)
+def run_scheduler(
+    force: bool = Query(default=False, description="Skip market-hours check"),
+    db: Session = Depends(get_db),
+):
+    try:
+        return run_scheduled_batch(db, ignore_market_hours=force)
+    except KakaoNotifyError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @router.get("/stocks/{symbol}/analysis/latest", response_model=AnalysisResultRead)
