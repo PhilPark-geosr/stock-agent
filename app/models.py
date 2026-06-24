@@ -38,3 +38,19 @@ class AnalysisResult(Base):
     alert_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     raw_result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class CustomAlertConditionRecord(Base):
+    __tablename__ = "custom_alert_conditions"
+    __table_args__ = (UniqueConstraint("symbol", "user_rule", name="uq_custom_alert_conditions_symbol_rule"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    symbol: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    user_rule: Mapped[str] = mapped_column(Text, nullable=False)
+    validation_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    required_tools: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    related_symbols: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    news_symbols: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

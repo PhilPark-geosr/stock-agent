@@ -11,11 +11,14 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.agent import AnalysisAgent, GeminiAnalysisAgent
+from app.alert_conditions import DEFAULT_SYSTEM_ALERT_CONDITIONS
+from app.analysis_graph import MainAnalysisAgent
+from app.custom_rule_agent import DefaultCustomRuleAgent
 from app.database import get_db
 from app.kakao_notify import AlertNotifier, KakaoNotifyError, get_default_alert_notifier
 from app.market_data import MarketDataProvider, YFinanceMarketDataProvider
 from app.models import AnalysisResult as StoredAnalysisResult
-from app.repositories import AnalysisRepository, WatchlistRepository, normalize_symbol
+from app.repositories import AlertConditionRepository, AnalysisRepository, WatchlistRepository, normalize_symbol
 from app.scheduler_config import scheduler_settings
 from app.schemas import model_to_dict
 from app.trading_window import is_alert_window
@@ -39,6 +42,7 @@ class AnalysisService:
         self,
         *,
         analysis_repository: AnalysisRepository,
+        alert_condition_repository: AlertConditionRepository,
         watchlist_repository: WatchlistRepository,
         market_data_provider: MarketDataProvider,
         agent: AnalysisAgent,
@@ -46,6 +50,7 @@ class AnalysisService:
         now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.analysis_repository = analysis_repository
+        self.alert_condition_repository = alert_condition_repository
         self.watchlist_repository = watchlist_repository
         self.market_data_provider = market_data_provider
         self.agent = agent
@@ -72,7 +77,10 @@ class AnalysisService:
             raise ValueError("symbol is required")
 
         market_data = self.market_data_provider.fetch(normalized_symbol)
-        agent_result = self.agent.analyze(market_data)
+        custom_conditions = self.alert_condition_repository.list_enabled_for_symbol(normalized_symbol)
+        alert_conditions = [*DEFAULT_SYSTEM_ALERT_CONDITIONS, *custom_conditions]
+        agent_result = self.agent.analyze(market_data, alert_conditions)
+        agent_result = self._validate_alert_decision(agent_result, alert_conditions)
         raw_result = model_to_dict(agent_result)
 
         return self.analysis_repository.save(
@@ -87,6 +95,23 @@ class AnalysisService:
             triggered_alerts=agent_result.matched_alert_conditions,
             alert_reason=agent_result.alert_reason,
             raw_result=raw_result,
+        )
+
+    @staticmethod
+    def _validate_alert_decision(agent_result, alert_conditions):
+        allowed_ids = {condition.id for condition in alert_conditions}
+        matched_ids = [
+            condition_id
+            for condition_id in agent_result.matched_alert_conditions
+            if condition_id in allowed_ids
+        ]
+        should_alert = bool(agent_result.alert_triggered and matched_ids and agent_result.alert_reason)
+        return agent_result.model_copy(
+            update={
+                "alert_triggered": should_alert,
+                "matched_alert_conditions": matched_ids,
+                "alert_reason": agent_result.alert_reason if should_alert else "",
+            }
         )
 
     def run_scheduled_batch(self, *, now: datetime | None = None) -> ScheduledBatchResult:
@@ -161,9 +186,14 @@ def build_analysis_service(
 ) -> AnalysisService:
     return AnalysisService(
         analysis_repository=AnalysisRepository(db),
+        alert_condition_repository=AlertConditionRepository(db),
         watchlist_repository=WatchlistRepository(db),
         market_data_provider=market_data_provider or YFinanceMarketDataProvider(),
-        agent=agent or GeminiAnalysisAgent(),
+        agent=agent
+        or MainAnalysisAgent(
+            main_model=GeminiAnalysisAgent(),
+            custom_rule_agent=DefaultCustomRuleAgent(),
+        ),
         alert_notifier=alert_notifier or get_default_alert_notifier(),
         now_provider=now_provider,
     )
@@ -174,7 +204,10 @@ def get_market_data_provider() -> MarketDataProvider:
 
 
 def get_analysis_agent() -> AnalysisAgent:
-    return GeminiAnalysisAgent()
+    return MainAnalysisAgent(
+        main_model=GeminiAnalysisAgent(),
+        custom_rule_agent=DefaultCustomRuleAgent(),
+    )
 
 
 def get_alert_notifier() -> AlertNotifier:

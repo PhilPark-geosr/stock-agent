@@ -9,6 +9,8 @@ from typing import Any, Iterable, Protocol
 
 import httpx
 
+from app.alert_conditions import AlertConditionUnion, DEFAULT_SYSTEM_ALERT_CONDITIONS
+
 from .schemas import (
     AnalysisResult,
     MarketDataSnapshot,
@@ -35,7 +37,8 @@ class AnalysisAgent(Protocol):
     def analyze(
         self,
         market_data: MarketDataSnapshot,
-        alert_conditions: Iterable[str] | None = None,
+        alert_conditions: Iterable[AlertConditionUnion] | None = None,
+        custom_contexts: Iterable[dict[str, Any]] | None = None,
     ) -> AnalysisResult:
         ...
 
@@ -51,12 +54,14 @@ class GeminiAnalysisAgent:
     def analyze(
         self,
         market_data: MarketDataSnapshot,
-        alert_conditions: Iterable[str] | None = None,
+        alert_conditions: Iterable[AlertConditionUnion] | None = None,
+        custom_contexts: Iterable[dict[str, Any]] | None = None,
     ) -> AnalysisResult:
         conditions = list(alert_conditions or DEFAULT_ALERT_CONDITIONS)
         payload = {
             "market_data": model_to_dict(market_data),
-            "alert_conditions": conditions,
+            "alert_conditions": [model_to_dict(condition) for condition in conditions],
+            "custom_contexts": list(custom_contexts or []),
             "analysis_time_hint": datetime.now(timezone.utc).isoformat(),
         }
         prompt = "\n\n".join(
@@ -111,12 +116,7 @@ class GeminiAnalysisAgent:
         return self.api_key
 
 
-DEFAULT_ALERT_CONDITIONS = [
-    "price_move_abs_gte_3_percent",
-    "volume_ratio_20_gte_2",
-    "volatility_20_elevated",
-    "sma_5_cross_sma_20",
-]
+DEFAULT_ALERT_CONDITIONS = DEFAULT_SYSTEM_ALERT_CONDITIONS
 
 
 SYSTEM_PROMPT = """

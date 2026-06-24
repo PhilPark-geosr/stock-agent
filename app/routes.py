@@ -14,8 +14,15 @@ from app.kakao_auth import (
     persist_tokens_to_env,
 )
 from app.market_data import MarketDataError
-from app.repositories import WatchlistRepository
-from app.schemas import AnalysisResultRead, WatchlistCreate, WatchlistItemRead
+from app.repositories import AlertConditionRepository, WatchlistRepository
+from app.rule_validation import GeminiRuleValidationAgent, RuleValidationAgent, RuleValidationError
+from app.schemas import (
+    AnalysisResultRead,
+    CustomAlertConditionCreate,
+    CustomAlertConditionRead,
+    WatchlistCreate,
+    WatchlistItemRead,
+)
 from app.kakao_notify import KakaoNotifyError
 from app.scheduler import run_scheduled_batch
 from app.services import AnalysisProvider, ScheduledBatchResult, get_analysis_service
@@ -37,6 +44,10 @@ def index(request: Request):
 @router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def get_rule_validation_agent() -> RuleValidationAgent:
+    return GeminiRuleValidationAgent()
 
 
 @router.get("/auth/kakao/login")
@@ -113,6 +124,52 @@ def delete_watchlist_item(symbol: str, db: Session = Depends(get_db)):
     deleted = WatchlistRepository(db).delete(symbol)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="watchlist item not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/alert-conditions",
+    response_model=CustomAlertConditionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_alert_condition(
+    payload: CustomAlertConditionCreate,
+    db: Session = Depends(get_db),
+    validation_agent: RuleValidationAgent = Depends(get_rule_validation_agent),
+):
+    try:
+        validation = validation_agent.validate(
+            user_rule=payload.user_rule,
+            target_symbol=payload.symbol,
+        )
+    except (RuleValidationError, AgentConfigurationError) as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    if not validation.is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "validation_summary": validation.validation_summary,
+                "rewrite_guidance": validation.rewrite_guidance,
+            },
+        )
+
+    return AlertConditionRepository(db).save_validated(
+        symbol=payload.symbol,
+        user_rule=payload.user_rule,
+        validation=validation,
+    )
+
+
+@router.get("/alert-conditions", response_model=list[CustomAlertConditionRead])
+def list_alert_conditions(db: Session = Depends(get_db)):
+    return AlertConditionRepository(db).list()
+
+
+@router.delete("/alert-conditions/{condition_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_alert_condition(condition_id: int, db: Session = Depends(get_db)):
+    if not AlertConditionRepository(db).delete(condition_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alert condition not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
