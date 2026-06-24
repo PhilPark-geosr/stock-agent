@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
+
+os.environ.setdefault("SCHEDULER_ENABLED", "false")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,7 +17,18 @@ from app.database import Base, get_db
 from app.main import app
 from app.market_data import MarketDataError
 from app.schemas import AnalysisResult, MarketDataSnapshot, MarketIndicators
-from app.services import get_analysis_agent, get_market_data_provider
+from app.services import build_analysis_service, get_alert_notifier, get_analysis_agent, get_market_data_provider
+
+# 12:00 KST — inside default 08-16 alert window
+ALERT_WINDOW_UTC = datetime(2026, 6, 1, 3, 0, tzinfo=timezone.utc)
+
+
+class FakeAlertNotifier:
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    def send_alert(self, alert_reason: str) -> None:
+        self.messages.append(alert_reason)
 
 
 class FakeMarketDataProvider:
@@ -89,13 +103,36 @@ def agent() -> FakeAnalysisAgent:
 
 
 @pytest.fixture
-def client(db_session, market_data: FakeMarketDataProvider, agent: FakeAnalysisAgent) -> TestClient:
+def alert_notifier() -> FakeAlertNotifier:
+    return FakeAlertNotifier()
+
+
+@pytest.fixture
+def client(
+    db_session,
+    market_data: FakeMarketDataProvider,
+    agent: FakeAnalysisAgent,
+    alert_notifier: FakeAlertNotifier,
+) -> TestClient:
     def override_get_db():
         yield db_session
+
+    def override_analysis_service():
+        return build_analysis_service(
+            db_session,
+            market_data_provider=market_data,
+            agent=agent,
+            alert_notifier=alert_notifier,
+            now_provider=lambda: ALERT_WINDOW_UTC,
+        )
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_market_data_provider] = lambda: market_data
     app.dependency_overrides[get_analysis_agent] = lambda: agent
+    app.dependency_overrides[get_alert_notifier] = lambda: alert_notifier
+    from app.services import get_analysis_service
+
+    app.dependency_overrides[get_analysis_service] = override_analysis_service
     test_client = TestClient(app)
     try:
         yield test_client

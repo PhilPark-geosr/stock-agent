@@ -105,6 +105,10 @@ flowchart LR
 
 ![분석 시스템 내부 구조](analysis_system_structure.svg)
 
+## 스케줄러
+
+장중 1시간 주기 분석·데이터 축적·알림 정책은 [scheduler_design.md](scheduler_design.md)에서 구체화한다.
+
 ## 시스템 시퀀스
 
 ```mermaid

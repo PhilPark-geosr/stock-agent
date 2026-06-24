@@ -1,0 +1,59 @@
+<mxfile host="65bd71144e">
+    <diagram id="kakao-use-case" name="카카오 알림 유스케이스">
+        <mxGraphModel dx="727" dy="511" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="system" value="카카오 알림 api" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontStyle=1;fontColor=#000000;fontSize=13;strokeColor=#333333;dashed=1;strokeWidth=2;fillColor=#FFFFFF;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="80" width="480" height="360" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor-investor" value="개인 투자자" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontColor=#000000;strokeColor=#333333;fillColor=#FFFFFF;" parent="1" vertex="1">
+                    <mxGeometry x="90" y="170" width="30" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="actor-kakao" value="카카오 API" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontColor=#000000;strokeColor=#333333;fillColor=#FFFFFF;" parent="1" vertex="1">
+                    <mxGeometry x="730" y="190" width="30" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="uc-k1" value="UC-K1&lt;br&gt;카카오 알림 연동" style="ellipse;whiteSpace=wrap;html=1;align=center;fontColor=#000000;fontSize=12;fillColor=#FFFFFF;strokeColor=#1565C0;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="250" y="130" width="160" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="uc-k2" value="UC-K2&lt;br&gt;분석 알림 발송" style="ellipse;whiteSpace=wrap;html=1;align=center;fontColor=#000000;fontSize=12;fillColor=#FFFFFF;strokeColor=#1565C0;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="290" y="230" width="160" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="uc-k3" value="UC-K3&lt;br&gt;토큰 갱신" style="ellipse;whiteSpace=wrap;html=1;align=center;fontColor=#000000;fontSize=12;fillColor=#FFFFFF;strokeColor=#1565C0;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="520" y="294" width="150" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="uc-k4" value="UC-K4&lt;br&gt;알림 발송 생략" style="ellipse;whiteSpace=wrap;html=1;align=center;fontColor=#000000;fontSize=12;fillColor=#F5F5F5;strokeColor=#666666;strokeWidth=2;" parent="1" vertex="1">
+                    <mxGeometry x="360" y="340" width="160" height="64" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-inv-k1" style="endArrow=none;html=1;rounded=0;strokeWidth=1;strokeColor=#333333;fontColor=#000000;" parent="1" source="actor-investor" target="uc-k1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-inv-k2" value="알림 수신" style="endArrow=none;html=1;rounded=0;strokeWidth=1;strokeColor=#333333;fontColor=#000000;labelBackgroundColor=#FFFFFF;" parent="1" source="actor-investor" target="uc-k2" edge="1">
+                    <mxGeometry x="0.298" y="11" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="edge-k1-kakao" value="OAuth / talk_message" style="endArrow=none;html=1;rounded=0;strokeWidth=1;strokeColor=#333333;fontColor=#000000;labelBackgroundColor=#FFFFFF;" parent="1" source="uc-k1" target="actor-kakao" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-k2-kakao" value="memo/default/send" style="endArrow=none;html=1;rounded=0;strokeWidth=1;strokeColor=#333333;fontColor=#000000;labelBackgroundColor=#FFFFFF;" parent="1" source="uc-k2" target="actor-kakao" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-k3-kakao" value="oauth/token" style="endArrow=none;html=1;rounded=0;strokeWidth=1;strokeColor=#333333;fontColor=#000000;labelBackgroundColor=#FFFFFF;" parent="1" source="uc-k3" target="actor-kakao" edge="1">
+                    <mxGeometry x="-0.3368" y="14" relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="660" y="270"/>
+                        </Array>
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="edge-k2-k3" value="실패 시" style="endArrow=open;dashed=1;html=1;rounded=0;strokeWidth=1;strokeColor=#333333;fontColor=#000000;labelBackgroundColor=#FFFFFF;" parent="1" source="uc-k2" target="uc-k3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-k2-k4" value="조건 미충족" style="endArrow=open;dashed=1;html=1;rounded=0;strokeWidth=1;strokeColor=#333333;fontColor=#000000;labelBackgroundColor=#FFFFFF;" parent="1" source="uc-k2" target="uc-k4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

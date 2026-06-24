@@ -26,6 +26,16 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
+    from sqlalchemy import inspect, text
+
     from app import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    inspector = inspect(engine)
+    if inspector.has_table("analysis_results"):
+        columns = {column["name"] for column in inspector.get_columns("analysis_results")}
+        if "alert_sent_at" not in columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE analysis_results ADD COLUMN alert_sent_at DATETIME")
+                )
