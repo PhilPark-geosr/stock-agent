@@ -15,6 +15,106 @@
 
 최종 알림 발송 여부는 메인 분석 에이전트가 판단하되, 서비스 계층은 조건 ID 검증, 중복 발송 방지, 알림 가능 시간 확인 같은 운영 정책을 반드시 적용한다.
 
+커스텀 알림조건은 등록 시점과 분석 시점의 책임을 분리한다.
+
+- 등록 시점: 사용자가 대시보드 설정 앱에서 자연어 조건을 입력하면 `RuleValidationAgent`가 해당 문장이 알림조건으로 사용할 수 있는지 판단한다. 사용할 수 있으면 정규화된 `CustomAlertCondition`으로 DB에 저장하고, 사용할 수 없으면 사용자에게 다시 작성하라고 안내한다.
+- 분석 시점: 분석 서비스는 DB에 저장된 유효한 사용자 알림조건만 읽는다. 사용자 조건이 있으면 메인 분석 에이전트가 `CustomRuleAgent`를 호출해 필요한 tool로 자료를 수집하고, 그 결과를 최종 분석에 사용한다.
+
+이 분리로 `CustomRuleAgent`는 매 분석마다 조건 자체가 성립 가능한지 검증하지 않고, 이미 승인된 `user_rule`을 실행하기 위한 context 수집에 집중한다.
+
+## 조건 등록 유즈케이스
+
+사용자가 자연어로 알림조건을 등록할 때는 먼저 조건 검증 단계를 거친다.
+
+```mermaid
+sequenceDiagram
+    actor U as 사용자
+    participant D as Dashboard Settings App
+    participant API as AlertCondition API
+    participant RVA as RuleValidationAgent
+    participant DB as DB
+
+    U->>D: 자연어 알림조건 입력
+    D->>API: POST /alert-conditions {user_rule}
+    API->>RVA: validate(user_rule, user_id, target_symbol)
+
+    RVA->>RVA: 알림조건으로 사용 가능한지 판단
+    RVA->>RVA: 필요한 tool 범위와 조건 대상 정리
+
+    alt 조건 등록 가능
+        RVA-->>API: valid result
+        API->>DB: CustomAlertCondition 저장
+        DB-->>API: 저장 완료
+        API-->>D: 등록 성공
+        D-->>U: 알림조건 등록 완료
+    else 조건 등록 불가
+        RVA-->>API: invalid result + rewrite_guidance
+        API-->>D: 등록 실패 + 수정 안내
+        D-->>U: 조건을 다시 작성하도록 안내
+    end
+```
+
+`RuleValidationAgent`는 아래 내용을 판단한다.
+
+- 조건이 알림으로 평가 가능한 문장인지
+- 대상 종목 또는 비교 대상이 충분히 명확한지
+- 시스템이 허용한 tool로 필요한 정보를 수집할 수 있는지
+- 조건이 너무 모호하거나 지속적인 사람 판단을 요구하지 않는지
+- 사용자가 다시 작성해야 한다면 어떤 식으로 고치면 되는지
+
+예를 들어 아래 조건은 등록 가능하다.
+
+```text
+엔비디아가 하루 5% 이상 급등하거나 반도체 악재 뉴스가 나오면 삼성전자 알려줘
+```
+
+반대로 아래 조건은 너무 모호하므로 재작성을 요청한다.
+
+```text
+뭔가 분위기가 안 좋으면 알려줘
+```
+
+## 분석 실행 유즈케이스
+
+분석 실행 시점에는 DB에 저장된 유효한 알림조건만 사용한다.
+
+```mermaid
+sequenceDiagram
+    participant S as AnalysisService / Scheduler
+    participant DB as DB
+    participant MD as MarketDataProvider
+    participant MA as Main Analysis Agent
+    participant CRA as CustomRuleAgent
+    participant T as Tools
+    participant N as Notification Service
+
+    S->>MD: fetch(symbol)
+    MD-->>S: MarketDataSnapshot
+
+    S->>DB: enabled alert conditions 조회
+    DB-->>S: SystemAlertCondition + CustomAlertCondition
+
+    S->>MA: analyze(market_data, alert_conditions)
+    MA->>MA: system/custom 조건 분리
+
+    alt CustomAlertCondition 있음
+        MA->>CRA: build_context(user_rule, condition_id, target_symbol)
+        CRA->>T: 필요한 tool 호출
+        T-->>CRA: 뉴스 / 관련 종목 / 시장 데이터
+        CRA-->>MA: CustomRuleContext
+    end
+
+    MA->>MA: market_data + conditions + custom context 종합
+    MA-->>S: AnalysisResult
+    S->>S: 조건 ID, 중복, 알림 가능 시간 검증
+
+    alt 발송 가능
+        S->>N: send_alert(alert_reason)
+    else 발송 제외
+        S->>S: skip
+    end
+```
+
 ## 전체 구조
 
 ```mermaid
@@ -121,7 +221,7 @@ sequenceDiagram
 ```python
 from typing import Literal, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AlertCondition(BaseModel):
@@ -142,14 +242,28 @@ class CustomAlertCondition(AlertCondition):
     user_id: int
     target_symbol: str | None = None
     user_rule: str
+    validation_summary: str | None = None
+    required_tools: list[str] = Field(default_factory=list)
 
 
 AlertConditionUnion = Union[SystemAlertCondition, CustomAlertCondition]
+
+
+class RuleValidationResult(BaseModel):
+    is_valid: bool
+    normalized_name: str | None = None
+    normalized_rule: str | None = None
+    target_symbol: str | None = None
+    required_tools: list[str] = Field(default_factory=list)
+    validation_summary: str
+    rewrite_guidance: str | None = None
 ```
 
 `SystemAlertCondition`은 시스템이 제공하는 고정 조건이다. 예를 들면 가격 급등락, 거래량 급증, 변동성 확대, 이동평균 크로스 같은 조건이다.
 
 `CustomAlertCondition`은 사용자가 자연어로 입력한 조건이다. 사용자는 필요한 데이터 요구사항을 직접 입력하지 않고 `user_rule`만 작성한다.
+
+`RuleValidationResult`는 사용자가 입력한 자연어 조건을 DB에 저장해도 되는지 판단한 결과다. `is_valid=true`이면 `normalized_rule`, `target_symbol`, `required_tools`, `validation_summary`를 이용해 `CustomAlertCondition`을 저장한다. `is_valid=false`이면 `rewrite_guidance`를 사용자에게 보여준다.
 
 예시:
 
@@ -157,13 +271,55 @@ AlertConditionUnion = Union[SystemAlertCondition, CustomAlertCondition]
 엔비디아가 급등하거나 반도체 악재 뉴스가 나오면 삼성전자 알려줘
 ```
 
+## RuleValidationAgent
+
+`RuleValidationAgent`는 사용자 자연어 조건을 등록하기 전에 실행되는 검증 에이전트다. 이 에이전트는 실제 분석을 수행하지 않고, 입력 문장이 시스템에서 실행 가능한 알림조건인지 판단한다.
+
+역할:
+
+- 사용자의 `user_rule`이 알림조건으로 평가 가능한지 판단
+- 조건 대상 종목과 비교 대상이 충분히 명확한지 확인
+- 필요한 tool 범위가 시스템의 allowlist 안에 있는지 확인
+- 너무 모호하거나 실행 불가능한 조건이면 재작성 안내 생성
+- 등록 가능한 조건이면 정규화된 이름, 조건 문장, 대상 종목, 필요한 tool 목록을 반환
+
+예상 출력:
+
+```json
+{
+  "is_valid": true,
+  "normalized_name": "엔비디아 급등 및 반도체 악재 감지",
+  "normalized_rule": "NVDA가 하루 5% 이상 상승하거나 반도체 업종 관련 부정적 뉴스가 확인되면 005930.KS에 대해 알림",
+  "target_symbol": "005930.KS",
+  "required_tools": ["fetch_related_symbol_snapshot", "search_news"],
+  "validation_summary": "관련 종목 가격 데이터와 뉴스 검색으로 평가 가능한 조건입니다.",
+  "rewrite_guidance": null
+}
+```
+
+등록 불가 예시:
+
+```json
+{
+  "is_valid": false,
+  "normalized_name": null,
+  "normalized_rule": null,
+  "target_symbol": null,
+  "required_tools": [],
+  "validation_summary": "조건이 너무 모호해서 어떤 데이터로 판단해야 하는지 정할 수 없습니다.",
+  "rewrite_guidance": "알림을 받을 종목, 비교 대상, 판단 기준을 함께 적어주세요. 예: 엔비디아가 하루 5% 이상 오르면 삼성전자 알려줘."
+}
+```
+
 ## CustomRuleAgent
 
 `CustomRuleAgent`는 커스텀 자연어 조건을 처리하는 단일 서브 에이전트다. 조건별로 에이전트를 여러 개 만들지 않는다.
 
+`CustomRuleAgent`는 DB에 저장된, 즉 `RuleValidationAgent` 검증을 통과한 조건만 입력받는다. 따라서 이 에이전트의 주 책임은 조건 등록 가능성 판단이 아니라, 분석 시점에 필요한 자료를 tool로 수집하고 `CustomRuleContext`로 요약하는 것이다.
+
 역할:
 
-- `CustomAlertCondition.user_rule` 해석
+- 검증된 `CustomAlertCondition.user_rule` 해석
 - 필요한 외부 정보 판단
 - 허용된 tool 호출
 - 수집한 정보를 `CustomRuleContext`로 요약
@@ -468,20 +624,26 @@ def analyze(
 ## 단계별 구현 계획
 
 1. `AlertCondition`, `SystemAlertCondition`, `CustomAlertCondition` 모델 추가
-2. 기본 시스템 알림조건을 구조화된 목록으로 변경
-3. `GeminiAnalysisAgent.analyze()`가 구조화된 조건을 payload에 포함하도록 변경
-4. `CustomRuleAgent` 인터페이스 추가
-5. `app/tools` 모듈과 tool registry 추가
-6. LangGraph 기반 `MainAnalysisAgent` 추가
-7. 기존 `AnalysisService`에서 새 agent를 호출하도록 연결
-8. agent 결과의 condition id 검증 로직 추가
-9. 사용자 커스텀 조건 저장소 추가
-10. 뉴스/관련 종목 tool을 실제 provider와 연결
+2. `RuleValidationResult` 모델 추가
+3. 기본 시스템 알림조건을 구조화된 목록으로 변경
+4. `RuleValidationAgent` 인터페이스 추가
+5. 자연어 사용자 조건 등록 API 추가
+6. 등록 성공 시 `CustomAlertCondition` 저장소에 저장
+7. 등록 실패 시 `rewrite_guidance`를 사용자에게 반환
+8. `CustomRuleAgent` 인터페이스 추가
+9. `app/tools` 모듈과 tool registry 추가
+10. LangGraph 기반 `MainAnalysisAgent` 추가
+11. `AnalysisService`가 DB에서 enabled alert conditions를 읽어 새 agent에 전달하도록 변경
+12. agent 결과의 condition id 검증 로직 추가
+13. 뉴스/관련 종목 tool을 실제 provider와 연결
 
 ## 핵심 원칙
 
 - 사용자는 `user_rule`만 입력한다.
-- `CustomRuleAgent`가 필요한 정보를 tool로 수집한다.
+- `RuleValidationAgent`가 등록 시점에 자연어 조건이 알림조건으로 실행 가능한지 검증한다.
+- 유효한 조건만 DB에 저장한다.
+- 분석 실행 시점에는 DB에 저장된 enabled 알림조건만 읽는다.
+- `CustomRuleAgent`는 검증된 조건에 필요한 정보를 tool로 수집한다.
 - 메인 에이전트가 시장 데이터, 시스템 조건, 커스텀 조건, 커스텀 context를 종합해 알림 판단을 한다.
 - 서비스 계층은 발송 정책과 검증을 담당한다.
 - 알림 서비스는 판단하지 않고 메시지를 전달하는 역할만 가진다.
