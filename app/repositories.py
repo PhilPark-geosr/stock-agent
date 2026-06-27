@@ -84,11 +84,12 @@ class AlertConditionRepository:
         record = CustomAlertConditionRecord(
             symbol=normalized,
             name=validation.normalized_name,
-            user_rule=validation.normalized_rule,
+            user_rule=user_rule.strip(),
+            normalized_rule=validation.normalized_rule,
             validation_summary=validation.validation_summary,
-            required_tools=validation.required_tools,
-            related_symbols=[normalize_symbol(value) for value in validation.related_symbols],
-            news_symbols=[normalize_symbol(value) for value in validation.news_symbols],
+            required_tools=[],
+            related_symbols=[],
+            news_symbols=[],
         )
         self.db.add(record)
         try:
@@ -98,7 +99,7 @@ class AlertConditionRepository:
             existing = self.db.scalar(
                 select(CustomAlertConditionRecord).where(
                     CustomAlertConditionRecord.symbol == normalized,
-                    CustomAlertConditionRecord.user_rule == validation.normalized_rule,
+                    CustomAlertConditionRecord.user_rule == user_rule.strip(),
                 )
             )
             if existing is not None:
@@ -122,6 +123,7 @@ class AlertConditionRepository:
             symbol=record.symbol,
             name=record.name,
             user_rule=record.user_rule,
+            normalized_rule=record.normalized_rule,
             validation_summary=record.validation_summary,
             required_tools=record.required_tools or [],
             related_symbols=record.related_symbols or [],

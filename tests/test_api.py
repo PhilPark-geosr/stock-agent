@@ -39,7 +39,9 @@ def test_custom_alert_condition_is_validated_and_saved(client, rule_validation_a
     assert response.status_code == 201
     body = response.json()
     assert body["symbol"] == "005930.KS"
-    assert body["required_tools"] == ["fetch_related_symbol_snapshot"]
+    assert body["user_rule"] == "Notify me when NVDA rises by 5 percent."
+    assert body["normalized_rule"] == "Alert when NVDA rises by 5 percent."
+    assert body["required_tools"] == []
     assert rule_validation_agent.calls == [
         ("Notify me when NVDA rises by 5 percent.", "005930.KS")
     ]

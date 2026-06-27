@@ -41,18 +41,18 @@ class GeminiRuleValidationAgent:
 You validate natural-language stock alert rules for a single-user application.
 Return one JSON object only.
 
-A rule is valid only if it has an understandable alert target and can be evaluated
-using the allowed tools. Reject subjective, vague, or unsupported requests. When
-rejecting a rule, explain how the user should rewrite it.
+A rule is valid only if it has an understandable alert target and is specific
+enough to be evaluated during analysis using the allowed tools. Reject subjective,
+vague, or unsupported requests. When rejecting a rule, explain how the user should
+rewrite it.
 
 For valid rules, return: is_valid=true, normalized_name, normalized_rule,
-target_symbol, required_tools, related_symbols, news_symbols,
-validation_summary, rewrite_guidance=null.
+target_symbol, validation_summary, rewrite_guidance=null.
 For invalid rules, return: is_valid=false, validation_summary, rewrite_guidance.
 
-Every tool in required_tools must be one of allowed_tools. Symbols must use ticker
-notation when they are explicit. The supplied target_symbol is the symbol the user
-expects to receive an alert about.
+Do not return a tool execution plan. Tool choice happens later at analysis time.
+Symbols must use ticker notation when they are explicit. The supplied target_symbol
+is the symbol the user expects to receive an alert about.
 """.strip(),
                 json.dumps(payload, ensure_ascii=False),
             ]
@@ -96,14 +96,6 @@ def _sanitize_result(result: RuleValidationResult, *, target_symbol: str) -> Rul
     if not result.is_valid:
         return result
 
-    unsupported = set(result.required_tools).difference(SUPPORTED_CUSTOM_RULE_TOOLS)
-    if unsupported:
-        return RuleValidationResult(
-            is_valid=False,
-            validation_summary="The requested rule needs tools that are not available.",
-            rewrite_guidance="Use a condition based on related-symbol prices or supported symbol news.",
-        )
-
     if not result.normalized_name or not result.normalized_rule:
         return RuleValidationResult(
             is_valid=False,
@@ -112,8 +104,6 @@ def _sanitize_result(result: RuleValidationResult, *, target_symbol: str) -> Rul
         )
 
     result.target_symbol = normalize_symbol(target_symbol)
-    result.related_symbols = [normalize_symbol(symbol) for symbol in result.related_symbols]
-    result.news_symbols = [normalize_symbol(symbol) for symbol in result.news_symbols]
     return result
 
 

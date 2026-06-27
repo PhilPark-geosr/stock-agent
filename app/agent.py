@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Protocol
 
 import httpx
+from pydantic import ValidationError
 
 from app.alert_conditions import AlertConditionUnion, DEFAULT_SYSTEM_ALERT_CONDITIONS
 
@@ -16,7 +17,6 @@ from .schemas import (
     MarketDataSnapshot,
     model_to_dict,
     parse_model,
-    parse_model_json,
 )
 
 
@@ -106,7 +106,7 @@ class GeminiAnalysisAgent:
 
         output_text = _extract_text(response.json())
         if output_text:
-            return _normalize_result(parse_model_json(AnalysisResult, _clean_json_text(output_text)), market_data)
+            return _parse_analysis_result(output_text, market_data)
 
         raise AnalysisAgentError("Gemini response did not include analysis JSON")
 
@@ -131,15 +131,41 @@ summary, key_reasons, risk_factors, alert_reason은 개인 투자자가 이해�
 """.strip()
 
 
-def _normalize_result(result: AnalysisResult, market_data: MarketDataSnapshot) -> AnalysisResult:
-    """Keep agent output aligned with the requested symbol and market-data timestamp."""
+def _parse_analysis_result(raw_json: str, market_data: MarketDataSnapshot) -> AnalysisResult:
+    try:
+        data = json.loads(_clean_json_text(raw_json))
+        if not isinstance(data, dict):
+            raise ValueError("analysis JSON must be an object")
+        return parse_model(AnalysisResult, _normalize_result_data(data, market_data))
+    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+        raise AnalysisAgentError(f"Gemini analysis response did not match AnalysisResult schema: {exc}") from exc
 
-    data = model_to_dict(result)
+
+def _normalize_result_data(data: dict[str, Any], market_data: MarketDataSnapshot) -> dict[str, Any]:
+    """Keep agent output aligned with the requested symbol and expected condition ids."""
+
+    data = dict(data)
     data["symbol"] = market_data.symbol
     data["data_time"] = market_data.data_time
+    data["matched_alert_conditions"] = _coerce_condition_ids(
+        data.get("matched_alert_conditions", [])
+    )
     if not data.get("analysis_time"):
         data["analysis_time"] = datetime.now(timezone.utc)
-    return parse_model(AnalysisResult, data)
+    return data
+
+
+def _coerce_condition_ids(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+
+    condition_ids: list[str] = []
+    for value in values:
+        if isinstance(value, str):
+            condition_ids.append(value)
+        elif isinstance(value, dict) and isinstance(value.get("id"), str):
+            condition_ids.append(value["id"])
+    return condition_ids
 
 
 def _extract_text(payload: dict[str, Any]) -> str | None:

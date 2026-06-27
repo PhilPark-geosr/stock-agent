@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 from app.agent import AnalysisAgent, GeminiAnalysisAgent
 from app.alert_conditions import DEFAULT_SYSTEM_ALERT_CONDITIONS
 from app.analysis_graph import MainAnalysisAgent
-from app.custom_rule_agent import DefaultCustomRuleAgent
+from app.custom_rule_agent import (
+    CustomRuleAgent,
+    LangGraphCustomRuleAgent,
+)
 from app.database import get_db
 from app.kakao_notify import AlertNotifier, KakaoNotifyError, get_default_alert_notifier
 from app.market_data import MarketDataProvider, YFinanceMarketDataProvider
@@ -79,6 +82,12 @@ class AnalysisService:
         market_data = self.market_data_provider.fetch(normalized_symbol)
         custom_conditions = self.alert_condition_repository.list_enabled_for_symbol(normalized_symbol)
         alert_conditions = [*DEFAULT_SYSTEM_ALERT_CONDITIONS, *custom_conditions]
+        logger.info(
+            "AnalysisService prepared analysis symbol=%s system_conditions=%d custom_conditions=%d",
+            normalized_symbol,
+            len(DEFAULT_SYSTEM_ALERT_CONDITIONS),
+            len(custom_conditions),
+        )
         agent_result = self.agent.analyze(market_data, alert_conditions)
         agent_result = self._validate_alert_decision(agent_result, alert_conditions)
         raw_result = model_to_dict(agent_result)
@@ -106,6 +115,12 @@ class AnalysisService:
             if condition_id in allowed_ids
         ]
         should_alert = bool(agent_result.alert_triggered and matched_ids and agent_result.alert_reason)
+        logger.info(
+            "AnalysisService validated alert decision symbol=%s alert_triggered=%s matched=%s",
+            agent_result.symbol,
+            should_alert,
+            matched_ids,
+        )
         return agent_result.model_copy(
             update={
                 "alert_triggered": should_alert,
@@ -192,7 +207,7 @@ def build_analysis_service(
         agent=agent
         or MainAnalysisAgent(
             main_model=GeminiAnalysisAgent(),
-            custom_rule_agent=DefaultCustomRuleAgent(),
+            custom_rule_agent=get_default_custom_rule_agent(),
         ),
         alert_notifier=alert_notifier or get_default_alert_notifier(),
         now_provider=now_provider,
@@ -203,10 +218,14 @@ def get_market_data_provider() -> MarketDataProvider:
     return YFinanceMarketDataProvider()
 
 
+def get_default_custom_rule_agent() -> CustomRuleAgent:
+    return LangGraphCustomRuleAgent()
+
+
 def get_analysis_agent() -> AnalysisAgent:
     return MainAnalysisAgent(
         main_model=GeminiAnalysisAgent(),
-        custom_rule_agent=DefaultCustomRuleAgent(),
+        custom_rule_agent=get_default_custom_rule_agent(),
     )
 
 

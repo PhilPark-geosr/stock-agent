@@ -84,8 +84,6 @@ class FakeRuleValidationAgent:
             normalized_name="Related symbol move",
             normalized_rule="Alert when NVDA rises by 5 percent.",
             target_symbol="005930.KS",
-            required_tools=["fetch_related_symbol_snapshot"],
-            related_symbols=["NVDA"],
             validation_summary="The condition can be evaluated with related-symbol market data.",
         )
         self.calls: list[tuple[str, str]] = []

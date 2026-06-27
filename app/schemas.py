@@ -141,10 +141,11 @@ class CustomAlertConditionRead(BaseModel):
     symbol: str
     name: str
     user_rule: str
+    normalized_rule: Optional[str] = None
     validation_summary: str
-    required_tools: List[str]
-    related_symbols: List[str]
-    news_symbols: List[str]
+    required_tools: List[str] = Field(default_factory=list)
+    related_symbols: List[str] = Field(default_factory=list)
+    news_symbols: List[str] = Field(default_factory=list)
     enabled: bool
     created_at: datetime
 

@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.agent import AgentConfigurationError, AnalysisAgentError
+from app.custom_rule_agent import CustomRuleAgentError
 from app.database import get_db
 from app.kakao_auth import (
     KakaoAuthError,
@@ -195,7 +196,7 @@ def get_latest_analysis(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except MarketDataError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    except (AnalysisAgentError, AgentConfigurationError) as exc:
+    except (AnalysisAgentError, AgentConfigurationError, CustomRuleAgentError) as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     except KakaoNotifyError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc

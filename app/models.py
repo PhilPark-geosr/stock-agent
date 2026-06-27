@@ -48,6 +48,7 @@ class CustomAlertConditionRecord(Base):
     symbol: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     user_rule: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_rule: Mapped[str | None] = mapped_column(Text, nullable=True)
     validation_summary: Mapped[str] = mapped_column(Text, nullable=False)
     required_tools: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     related_symbols: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)

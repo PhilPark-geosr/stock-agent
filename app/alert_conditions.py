@@ -24,6 +24,7 @@ class CustomAlertCondition(AlertCondition):
     kind: Literal["custom"] = "custom"
     symbol: str
     user_rule: str
+    normalized_rule: str | None = None
     validation_summary: str
     required_tools: list[str] = Field(default_factory=list)
     related_symbols: list[str] = Field(default_factory=list)
@@ -38,9 +39,6 @@ class RuleValidationResult(BaseModel):
     normalized_name: str | None = None
     normalized_rule: str | None = None
     target_symbol: str | None = None
-    required_tools: list[str] = Field(default_factory=list)
-    related_symbols: list[str] = Field(default_factory=list)
-    news_symbols: list[str] = Field(default_factory=list)
     validation_summary: str
     rewrite_guidance: str | None = None
 
