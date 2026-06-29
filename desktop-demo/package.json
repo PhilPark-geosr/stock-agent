@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "electron .",
-    "check": "node --check main.js && node --check preload.js && node --check src/renderer.js"
+    "check": "node --check main.js && node --check preload.js && node --check src/renderer.js && node --check src/components/layout.js && node --check src/components/toast.js && node --check src/features/watchlist.js && node --check src/features/analysis.js"
   },
   "devDependencies": {
     "electron": "42.4.1"

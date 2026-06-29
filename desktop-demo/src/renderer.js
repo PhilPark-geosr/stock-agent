@@ -1,3 +1,13 @@
+const {
+  AppShell,
+  showToast,
+  WatchlistPanel,
+  renderWatchlist,
+  AnalysisWorkspace,
+  renderAnalysis,
+  renderHistory
+} = window.StockAgent;
+
 const stockData = [
   {
     symbol: "005930.KS",
@@ -127,106 +137,36 @@ const stockData = [
 
 let selectedSymbol = stockData[0].symbol;
 let selectedAnalysisId = stockData[0].analyses[0].id;
-let toastTimer;
-
-const formatPrice = (value) => new Intl.NumberFormat("ko-KR").format(value);
 const currentStock = () => stockData.find((stock) => stock.symbol === selectedSymbol);
 const currentAnalysis = () => currentStock().analyses.find((item) => item.id === selectedAnalysisId) || currentStock().analyses[0];
 
-function verdictClass(verdict) {
-  if (verdict === "상승") return "verdict-up";
-  if (verdict === "중립") return "verdict-neutral";
-  return "verdict-watch";
-}
-
-function showToast(message) {
-  const toast = document.querySelector("#toast");
-  toast.textContent = message;
-  toast.classList.add("show");
-  window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => toast.classList.remove("show"), 2200);
-}
-
-function renderWatchlist() {
-  const list = document.querySelector("#watchlist");
-  list.innerHTML = "";
-  stockData.forEach((stock) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `watchlist-item${stock.symbol === selectedSymbol ? " active" : ""}`;
-    button.innerHTML = `
-      <span class="stock-label"><strong>${stock.symbol}</strong><small>${stock.name}</small></span>
-      <span class="stock-alert">${stock.alertStatus}</span>
-    `;
-    button.addEventListener("click", () => selectStock(stock.symbol));
-    list.appendChild(button);
-  });
-  document.querySelector("#watchlist-count").textContent = `${stockData.length}개`;
-}
-
-function renderAnalysis() {
+function renderScreen() {
   const stock = currentStock();
   const analysis = currentAnalysis();
-  const verdict = document.querySelector("#verdict");
-  const sign = stock.change >= 0 ? "+" : "";
-
-  document.querySelector("#selected-symbol").textContent = stock.symbol;
-  document.querySelector("#selected-name").textContent = stock.name;
-  document.querySelector("#analysis-time").textContent = `${analysis.id === stock.analyses[0].id ? "LATEST ANALYSIS" : "HISTORY DETAIL"} · ${analysis.time}`;
-  verdict.textContent = analysis.verdict;
-  verdict.className = `verdict ${verdictClass(analysis.verdict)}`;
-  document.querySelector("#hero-symbol-name").textContent = `${stock.name} (${stock.symbol})`;
-  document.querySelector("#analysis-summary").textContent = analysis.summary;
-  document.querySelector("#current-price").textContent = `${formatPrice(stock.price)}원`;
-  document.querySelector("#price-change").textContent = `${stock.change >= 0 ? "▲" : "▼"} ${sign}${stock.change.toFixed(2)}%`;
-  document.querySelector("#price-change").className = stock.change >= 0 ? "positive" : "negative";
-  document.querySelector("#volume-ratio").textContent = stock.volumeRatio;
-  document.querySelector("#low-price").textContent = `${stock.low20}원`;
-  document.querySelector("#high-price").textContent = `${stock.high20}원`;
-  document.querySelector("#alert-status").textContent = stock.alertStatus;
-  document.querySelector("#alert-detail").textContent = stock.alertDetail;
-  document.querySelector("#matched-alerts").textContent = stock.matchedAlerts.length ? `${stock.matchedAlerts.length}개` : "없음";
-  document.querySelector("#data-time").textContent = stock.dataTime;
-  renderList("#reason-list", analysis.reasons);
-  renderList("#risk-list", analysis.risks);
-  renderHistory();
-}
-
-function renderList(selector, items) {
-  document.querySelector(selector).innerHTML = items.map((item) => `<li>${item}</li>`).join("");
-}
-
-function renderHistory() {
-  const stock = currentStock();
-  const list = document.querySelector("#history-list");
-  list.innerHTML = "";
-  stock.analyses.forEach((analysis) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `history-item${analysis.id === selectedAnalysisId ? " active" : ""}`;
-    button.innerHTML = `
-      <span>#${analysis.id}</span>
-      <span>${analysis.time}</span>
-      <span class="history-verdict">${analysis.verdict}</span>
-      <span class="history-summary">${analysis.summary}</span>
-      <span class="history-arrow">›</span>
-    `;
-    button.addEventListener("click", () => {
-      selectedAnalysisId = analysis.id;
-      renderAnalysis();
-      showToast(`GET /stocks/${stock.symbol}/analysis/${analysis.id} 상세를 표시합니다.`);
-    });
-    list.appendChild(button);
-  });
+  renderWatchlist(stockData, selectedSymbol, selectStock);
+  renderAnalysis(stock, analysis);
+  renderHistory(stock, selectedAnalysisId, selectAnalysis);
 }
 
 function selectStock(symbol) {
   selectedSymbol = symbol;
   selectedAnalysisId = currentStock().analyses[0].id;
-  renderWatchlist();
-  renderAnalysis();
+  renderScreen();
   showToast(`GET /stocks/${symbol}/analysis/latest 결과를 표시합니다.`);
 }
+
+function selectAnalysis(analysisId) {
+  selectedAnalysisId = analysisId;
+  renderScreen();
+  showToast(`GET /stocks/${selectedSymbol}/analysis/${analysisId} 상세를 표시합니다.`);
+}
+
+document.querySelector("#app").innerHTML = AppShell(`
+  <section class="workspace-grid">
+    ${WatchlistPanel()}
+    ${AnalysisWorkspace()}
+  </section>
+`);
 
 document.querySelector("#search-form").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -281,12 +221,13 @@ document.querySelector("#add-symbol-form").addEventListener("submit", (event) =>
 
 document.querySelector("#latest-button").addEventListener("click", () => {
   selectedAnalysisId = currentStock().analyses[0].id;
-  renderAnalysis();
+  renderScreen();
   showToast("최신 분석 결과로 돌아왔습니다.");
 });
 
 document.querySelector("#run-analysis-button").addEventListener("click", (event) => {
-  event.currentTarget.disabled = true;
+  const runButton = event.currentTarget;
+  runButton.disabled = true;
   document.querySelector("#scheduler-status").textContent = "실행 중";
   showToast("POST /scheduler/run?force=true mock 실행 중입니다.");
   window.setTimeout(() => {
@@ -300,11 +241,10 @@ document.querySelector("#run-analysis-button").addEventListener("click", (event)
       hour12: false
     });
     document.querySelector("#scheduler-status").textContent = "완료";
-    event.currentTarget.disabled = false;
-    renderAnalysis();
+    runButton.disabled = false;
+    renderScreen();
     showToast("스케줄러 실행 결과를 mock 데이터로 반영했습니다.");
   }, 700);
 });
 
-renderWatchlist();
-renderAnalysis();
+renderScreen();
