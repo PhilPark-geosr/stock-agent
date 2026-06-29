@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.repositories import AnalysisRepository
+from app.alert_conditions import RuleValidationResult
 from app.schemas import AnalysisResult
 
 
@@ -24,6 +25,63 @@ def test_watchlist_crud(client):
 
     assert delete_response.status_code == 204
     assert not any(item["symbol"] == "MSFT" for item in client.get("/watchlist").json())
+
+
+def test_custom_alert_condition_is_validated_and_saved(client, rule_validation_agent):
+    response = client.post(
+        "/alert-conditions",
+        json={
+            "symbol": "005930.KS",
+            "user_rule": "Notify me when NVDA rises by 5 percent.",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["symbol"] == "005930.KS"
+    assert body["user_rule"] == "Notify me when NVDA rises by 5 percent."
+    assert body["normalized_rule"] == "Alert when NVDA rises by 5 percent."
+    assert body["required_tools"] == []
+    assert rule_validation_agent.calls == [
+        ("Notify me when NVDA rises by 5 percent.", "005930.KS")
+    ]
+
+    listed = client.get("/alert-conditions")
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()] == [body["id"]]
+
+
+def test_custom_alert_condition_rejection_returns_rewrite_guidance(client, rule_validation_agent):
+    rule_validation_agent.result = RuleValidationResult(
+        is_valid=False,
+        validation_summary="The rule is too vague.",
+        rewrite_guidance="Name a symbol and measurable trigger.",
+    )
+
+    response = client.post(
+        "/alert-conditions",
+        json={"symbol": "005930.KS", "user_rule": "Tell me when the mood is bad."},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["rewrite_guidance"] == "Name a symbol and measurable trigger."
+
+
+def test_analysis_receives_enabled_custom_conditions(client, agent):
+    client.post(
+        "/alert-conditions",
+        json={
+            "symbol": "005930.KS",
+            "user_rule": "Notify me when NVDA rises by 5 percent.",
+        },
+    )
+
+    response = client.get("/stocks/005930.KS/analysis/latest")
+
+    assert response.status_code == 200
+    condition_ids = [condition.id for condition in agent.alert_conditions[0]]
+    assert "custom.1" in condition_ids
+    assert "price_move_abs_gte_3_percent" in condition_ids
 
 
 def test_latest_analysis_returns_cached_result_without_external_calls(

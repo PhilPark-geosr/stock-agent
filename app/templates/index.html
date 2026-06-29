@@ -10,6 +10,10 @@
         font-family: Arial, Helvetica, sans-serif;
       }
 
+      * {
+        box-sizing: border-box;
+      }
+
       body {
         margin: 0;
         background: #f6f7f9;
@@ -17,18 +21,45 @@
       }
 
       main {
-        max-width: 760px;
-        margin: 48px auto;
-        padding: 0 20px;
+        max-width: 920px;
+        margin: 40px auto;
+        padding: 0 20px 48px;
+      }
+
+      h1 {
+        margin: 0 0 28px;
+      }
+
+      h2 {
+        margin: 0 0 14px;
+        font-size: 20px;
+      }
+
+      section {
+        border-top: 1px solid #d7dde5;
+        padding: 26px 0;
       }
 
       form {
-        display: flex;
-        gap: 8px;
-        margin: 20px 0;
+        display: grid;
+        gap: 10px;
+        margin: 0 0 16px;
+      }
+
+      .inline-form {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: #4c5b6a;
+        font-size: 13px;
+        font-weight: 700;
       }
 
       input,
+      textarea,
       button {
         border: 1px solid #ccd3dd;
         border-radius: 6px;
@@ -36,9 +67,17 @@
         padding: 10px 12px;
       }
 
-      input {
-        flex: 1;
+      input,
+      textarea {
+        width: 100%;
         min-width: 0;
+        background: white;
+        color: #1c2733;
+      }
+
+      textarea {
+        min-height: 96px;
+        resize: vertical;
       }
 
       button {
@@ -46,46 +85,188 @@
         border-color: #1f6feb;
         color: white;
         cursor: pointer;
+        font-weight: 700;
       }
 
-      pre {
-        min-height: 160px;
-        overflow: auto;
+      button.secondary {
+        background: white;
+        border-color: #b8c1cc;
+        color: #1c2733;
+      }
+
+      button.danger {
+        background: #c9362c;
+        border-color: #c9362c;
+      }
+
+      pre,
+      .status,
+      .condition-list {
         border: 1px solid #d7dde5;
         border-radius: 6px;
         background: white;
+      }
+
+      pre {
+        min-height: 180px;
+        overflow: auto;
         padding: 16px;
         white-space: pre-wrap;
+      }
+
+      .status {
+        min-height: 44px;
+        margin: 0 0 16px;
+        padding: 12px;
+        color: #4c5b6a;
+      }
+
+      .condition-list {
+        display: grid;
+        gap: 0;
+        overflow: hidden;
+      }
+
+      .condition-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 14px;
+        padding: 14px;
+        border-top: 1px solid #eef1f5;
+      }
+
+      .condition-item:first-child {
+        border-top: 0;
+      }
+
+      .condition-title {
+        margin: 0 0 6px;
+        font-weight: 700;
+      }
+
+      .condition-meta {
+        margin: 0;
+        color: #647386;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .condition-rule {
+        margin: 8px 0 0;
+        white-space: pre-wrap;
+      }
+
+      .empty {
+        padding: 14px;
+        color: #647386;
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        align-items: start;
+        justify-content: end;
+      }
+
+      @media (max-width: 640px) {
+        main {
+          margin-top: 24px;
+        }
+
+        .inline-form,
+        .condition-item {
+          grid-template-columns: 1fr;
+        }
+
+        .actions {
+          justify-content: start;
+        }
       }
     </style>
   </head>
   <body>
     <main>
-      <h1>Latest Analysis</h1>
-      <form id="lookup-form">
-        <input id="symbol" name="symbol" value="{{ default_symbol }}" aria-label="Stock symbol">
-        <button type="submit">Lookup</button>
-      </form>
-      <pre id="result" aria-live="polite">Enter a symbol and run lookup.</pre>
+      <h1>Stock Agent Dashboard</h1>
+
+      <section>
+        <h2>Latest Analysis</h2>
+        <form id="lookup-form" class="inline-form">
+          <label>
+            Symbol
+            <input id="symbol" name="symbol" value="{{ default_symbol }}" aria-label="Stock symbol">
+          </label>
+          <button type="submit">Lookup</button>
+        </form>
+        <pre id="result" aria-live="polite">Enter a symbol and run lookup.</pre>
+      </section>
+
+      <section>
+        <h2>Custom Alert Condition</h2>
+        <form id="condition-form">
+          <label>
+            Symbol
+            <input id="condition-symbol" name="condition-symbol" value="{{ default_symbol }}" aria-label="Alert condition symbol">
+          </label>
+          <label>
+            User rule
+            <textarea id="user-rule" name="user-rule" aria-label="User alert rule" placeholder="Example: Alert me if Samsung Electronics has negative semiconductor demand news."></textarea>
+          </label>
+          <div class="actions">
+            <button type="button" class="secondary" id="refresh-conditions">Refresh</button>
+            <button type="submit">Save Condition</button>
+          </div>
+        </form>
+        <div id="condition-status" class="status" aria-live="polite">Ready.</div>
+        <div id="condition-list" class="condition-list" aria-live="polite"></div>
+      </section>
     </main>
     <script>
-      const form = document.querySelector("#lookup-form");
+      const lookupForm = document.querySelector("#lookup-form");
+      const conditionForm = document.querySelector("#condition-form");
+      const refreshConditionsButton = document.querySelector("#refresh-conditions");
+      const symbolInput = document.querySelector("#symbol");
+      const conditionSymbolInput = document.querySelector("#condition-symbol");
+      const userRuleInput = document.querySelector("#user-rule");
       const result = document.querySelector("#result");
+      const conditionStatus = document.querySelector("#condition-status");
+      const conditionList = document.querySelector("#condition-list");
 
-      form.addEventListener("submit", async (event) => {
+      function formatError(body) {
+        if (!body) {
+          return "Unknown error";
+        }
+        if (typeof body.detail === "string") {
+          return body.detail;
+        }
+        if (body.detail) {
+          return JSON.stringify(body.detail, null, 2);
+        }
+        return JSON.stringify(body, null, 2);
+      }
+
+      async function readJson(response) {
+        const text = await response.text();
+        if (!text) {
+          return null;
+        }
+        return JSON.parse(text);
+      }
+
+      lookupForm.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const symbol = document.querySelector("#symbol").value.trim() || "005930.KS";
+        const symbol = symbolInput.value.trim() || "005930.KS";
+        conditionSymbolInput.value = symbol;
         result.textContent = "Loading...";
 
         try {
           const response = await fetch(`/stocks/${encodeURIComponent(symbol)}/analysis/latest`);
-          const body = await response.json();
+          const body = await readJson(response);
           if (!response.ok) {
-            result.textContent = `Error ${response.status}: ${body.detail || JSON.stringify(body)}`;
+            result.textContent = `Error ${response.status}: ${formatError(body)}`;
             return;
           }
           const lines = [
-            body.should_alert ? "카카오 알림: 전송 시도됨 (나와의 채팅 확인)" : "카카오 알림: 조건 미충족",
+            body.should_alert ? "Alert: triggered" : "Alert: not triggered",
             "",
             JSON.stringify(body, null, 2),
           ];
@@ -94,6 +275,123 @@
           result.textContent = `Lookup failed: ${error}`;
         }
       });
+
+      conditionForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const symbol = conditionSymbolInput.value.trim() || symbolInput.value.trim();
+        const userRule = userRuleInput.value.trim();
+        if (!symbol || !userRule) {
+          conditionStatus.textContent = "Symbol and user rule are required.";
+          return;
+        }
+
+        conditionStatus.textContent = "Validating and saving...";
+        try {
+          const response = await fetch("/alert-conditions", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({symbol, user_rule: userRule}),
+          });
+          const body = await readJson(response);
+          if (!response.ok) {
+            conditionStatus.textContent = `Rejected ${response.status}: ${formatError(body)}`;
+            return;
+          }
+
+          userRuleInput.value = "";
+          conditionStatus.textContent = `Saved condition #${body.id}: ${body.validation_summary}`;
+          await loadConditions();
+        } catch (error) {
+          conditionStatus.textContent = `Save failed: ${error}`;
+        }
+      });
+
+      refreshConditionsButton.addEventListener("click", () => {
+        loadConditions();
+      });
+
+      async function deleteCondition(conditionId) {
+        conditionStatus.textContent = `Deleting condition #${conditionId}...`;
+        try {
+          const response = await fetch(`/alert-conditions/${conditionId}`, {
+            method: "DELETE",
+          });
+          if (!response.ok) {
+            const body = await readJson(response);
+            conditionStatus.textContent = `Delete failed ${response.status}: ${formatError(body)}`;
+            return;
+          }
+          conditionStatus.textContent = `Deleted condition #${conditionId}.`;
+          await loadConditions();
+        } catch (error) {
+          conditionStatus.textContent = `Delete failed: ${error}`;
+        }
+      }
+
+      async function loadConditions() {
+        conditionList.innerHTML = '<div class="empty">Loading conditions...</div>';
+        try {
+          const response = await fetch("/alert-conditions");
+          const body = await readJson(response);
+          if (!response.ok) {
+            conditionList.innerHTML = "";
+            conditionStatus.textContent = `Load failed ${response.status}: ${formatError(body)}`;
+            return;
+          }
+          renderConditions(body || []);
+        } catch (error) {
+          conditionList.innerHTML = "";
+          conditionStatus.textContent = `Load failed: ${error}`;
+        }
+      }
+
+      function renderConditions(conditions) {
+        conditionList.innerHTML = "";
+        if (!conditions.length) {
+          conditionList.innerHTML = '<div class="empty">No custom alert conditions yet.</div>';
+          return;
+        }
+
+        for (const condition of conditions) {
+          const item = document.createElement("article");
+          item.className = "condition-item";
+
+          const content = document.createElement("div");
+          const title = document.createElement("p");
+          title.className = "condition-title";
+          title.textContent = `#${condition.id} ${condition.symbol} - ${condition.name}`;
+
+          const meta = document.createElement("p");
+          meta.className = "condition-meta";
+          const tools = (condition.required_tools || []).join(", ") || "none";
+          const related = (condition.related_symbols || []).join(", ") || "none";
+          const news = (condition.news_symbols || []).join(", ") || "none";
+          meta.textContent = `Tools: ${tools} | Related: ${related} | News: ${news}`;
+
+          const summary = document.createElement("p");
+          summary.className = "condition-meta";
+          summary.textContent = condition.validation_summary || "";
+
+          const rule = document.createElement("p");
+          rule.className = "condition-rule";
+          rule.textContent = condition.user_rule;
+
+          const actions = document.createElement("div");
+          actions.className = "actions";
+          const deleteButton = document.createElement("button");
+          deleteButton.type = "button";
+          deleteButton.className = "danger";
+          deleteButton.textContent = "Delete";
+          deleteButton.addEventListener("click", () => deleteCondition(condition.id));
+          actions.appendChild(deleteButton);
+
+          content.append(title, meta, summary, rule);
+          item.append(content, actions);
+          conditionList.appendChild(item);
+        }
+      }
+
+      loadConditions();
     </script>
   </body>
 </html>
