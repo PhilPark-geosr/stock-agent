@@ -16,6 +16,7 @@ from app.agent import AnalysisAgentError
 from app.database import Base, get_db
 from app.main import app
 from app.market_data import MarketDataError
+from app.rule_validation import RuleValidationResult
 from app.schemas import AnalysisResult, MarketDataSnapshot, MarketIndicators
 from app.services import build_analysis_service, get_alert_notifier, get_analysis_agent, get_market_data_provider
 
@@ -54,9 +55,11 @@ class FakeAnalysisAgent:
         self.result = result
         self.error = error
         self.calls: list[MarketDataSnapshot] = []
+        self.alert_conditions: list[list[object]] = []
 
-    def analyze(self, market_data: MarketDataSnapshot, alert_conditions=None) -> AnalysisResult:
+    def analyze(self, market_data: MarketDataSnapshot, alert_conditions=None, custom_contexts=None) -> AnalysisResult:
         self.calls.append(market_data)
+        self.alert_conditions.append(list(alert_conditions or []))
         if self.error is not None:
             raise self.error
         return self.result or AnalysisResult(
@@ -72,6 +75,22 @@ class FakeAnalysisAgent:
             matched_alert_conditions=[],
             alert_reason="No alert condition matched.",
         )
+
+
+class FakeRuleValidationAgent:
+    def __init__(self, result: RuleValidationResult | None = None) -> None:
+        self.result = result or RuleValidationResult(
+            is_valid=True,
+            normalized_name="Related symbol move",
+            normalized_rule="Alert when NVDA rises by 5 percent.",
+            target_symbol="005930.KS",
+            validation_summary="The condition can be evaluated with related-symbol market data.",
+        )
+        self.calls: list[tuple[str, str]] = []
+
+    def validate(self, *, user_rule: str, target_symbol: str) -> RuleValidationResult:
+        self.calls.append((user_rule, target_symbol))
+        return self.result
 
 
 @pytest.fixture
@@ -108,11 +127,17 @@ def alert_notifier() -> FakeAlertNotifier:
 
 
 @pytest.fixture
+def rule_validation_agent() -> FakeRuleValidationAgent:
+    return FakeRuleValidationAgent()
+
+
+@pytest.fixture
 def client(
     db_session,
     market_data: FakeMarketDataProvider,
     agent: FakeAnalysisAgent,
     alert_notifier: FakeAlertNotifier,
+    rule_validation_agent: FakeRuleValidationAgent,
 ) -> TestClient:
     def override_get_db():
         yield db_session
@@ -130,6 +155,9 @@ def client(
     app.dependency_overrides[get_market_data_provider] = lambda: market_data
     app.dependency_overrides[get_analysis_agent] = lambda: agent
     app.dependency_overrides[get_alert_notifier] = lambda: alert_notifier
+    from app.routes import get_rule_validation_agent
+
+    app.dependency_overrides[get_rule_validation_agent] = lambda: rule_validation_agent
     from app.services import get_analysis_service
 
     app.dependency_overrides[get_analysis_service] = override_analysis_service

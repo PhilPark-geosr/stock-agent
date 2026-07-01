@@ -49,6 +49,9 @@ Open `http://127.0.0.1:8000` in your browser.
 - `GET /watchlist` - list watchlist symbols
 - `POST /watchlist` - add a symbol, for example `{"symbol": "005930.KS"}`
 - `DELETE /watchlist/{symbol}` - remove a symbol
+- `POST /alert-conditions` - validate and save a natural-language custom alert condition
+- `GET /alert-conditions` - list saved custom alert conditions
+- `DELETE /alert-conditions/{condition_id}` - remove a custom alert condition
 - `GET /stocks/{symbol}/analysis/latest` - get the latest analysis, creating one when no cached result exists
 
 ## Tests

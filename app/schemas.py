@@ -121,6 +121,40 @@ class WatchlistItemRead(BaseModel):
     created_at: datetime
 
 
+class CustomAlertConditionCreate(BaseModel):
+    symbol: str = Field(..., min_length=1, max_length=24)
+    user_rule: str = Field(..., min_length=5, max_length=1000)
+
+    @field_validator("symbol")
+    @classmethod
+    def validate_symbol(cls, value: str) -> str:
+        normalized = _normalize_symbol(value)
+        if not normalized:
+            raise ValueError("symbol is required")
+        return normalized
+
+
+class CustomAlertConditionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    symbol: str
+    name: str
+    user_rule: str
+    normalized_rule: Optional[str] = None
+    validation_summary: str
+    required_tools: List[str] = Field(default_factory=list)
+    related_symbols: List[str] = Field(default_factory=list)
+    news_symbols: List[str] = Field(default_factory=list)
+    enabled: bool
+    created_at: datetime
+
+
+class AlertConditionRejected(BaseModel):
+    validation_summary: str
+    rewrite_guidance: str
+
+
 class AnalysisResultRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
