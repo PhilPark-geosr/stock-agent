@@ -3,184 +3,255 @@ const {
   showToast,
   WatchlistPanel,
   renderWatchlist,
-  AnalysisWorkspace,
+  AnalysisOverview,
+  AnalysisHistoryPanel,
   renderAnalysis,
-  renderHistory
+  renderHistory,
+  AlertConditionsPanel,
+  renderAlertConditions
 } = window.StockAgent;
 
-const stockData = [
-  {
-    symbol: "005930.KS",
-    name: "삼성전자",
-    price: 74800,
-    change: 2.18,
-    volumeRatio: "1.8x",
-    low20: "72,500",
-    high20: "76,200",
-    alertStatus: "전송 대상",
-    alertDetail: "조건 충족, 카카오 발송 전",
-    matchedAlerts: ["거래량 급증", "이동평균 상향 돌파"],
-    dataTime: "2026-06-22 13:58 KST",
-    analyses: [
-      {
-        id: 101,
-        time: "2026-06-22 14:00",
-        verdict: "상승",
-        summary: "반도체 업황 회복 기대와 외국인 수급이 단기 흐름을 지지합니다.",
-        reasons: ["20일 평균 대비 거래량 1.8배 증가", "5일 이동평균선이 20일선을 상향 돌파", "외국인 순매수 흐름 3거래일 연속"],
-        risks: ["단기 상승에 따른 차익 실현 가능성", "원/달러 환율 변동성 확대", "메모리 가격 회복 속도 불확실성"]
-      },
-      {
-        id: 102,
-        time: "2026-06-22 13:00",
-        verdict: "중립",
-        summary: "방향성 확인 전까지 주요 지지선 관찰이 필요합니다.",
-        reasons: ["단기 이동평균선 부근 횡보", "외국인 수급은 소폭 개선", "거래량은 평균 수준 유지"],
-        risks: ["상단 매물대 저항", "환율 민감도", "추가 거래량 확인 필요"]
-      }
-    ]
-  },
-  {
-    symbol: "000660.KS",
-    name: "SK하이닉스",
-    price: 189400,
-    change: 1.04,
-    volumeRatio: "1.4x",
-    low20: "184,000",
-    high20: "193,500",
-    alertStatus: "대기",
-    alertDetail: "알림 조건 일부만 충족",
-    matchedAlerts: ["업종 강세"],
-    dataTime: "2026-06-22 13:57 KST",
-    analyses: [
-      {
-        id: 201,
-        time: "2026-06-22 14:00",
-        verdict: "상승",
-        summary: "HBM 수요 기대가 유지되며 단기 수급도 양호합니다.",
-        reasons: ["외국인 순매수 전환", "고점 돌파 시도", "반도체 업종 강세"],
-        risks: ["최근 상승폭 부담", "업종 변동성", "실적 기대 선반영"]
-      },
-      {
-        id: 202,
-        time: "2026-06-22 13:00",
-        verdict: "중립",
-        summary: "상승 추세 안에서 단기 숨 고르기가 나타납니다.",
-        reasons: ["20일선 상단 유지", "거래량 안정", "업종 흐름 양호"],
-        risks: ["고점 매물", "단기 과열", "환율 변화"]
-      }
-    ]
-  },
-  {
-    symbol: "035420.KS",
-    name: "NAVER",
-    price: 214500,
-    change: -0.46,
-    volumeRatio: "0.9x",
-    low20: "210,000",
-    high20: "222,000",
-    alertStatus: "조건 미충족",
-    alertDetail: "카카오 알림 없음",
-    matchedAlerts: [],
-    dataTime: "2026-06-22 13:56 KST",
-    analyses: [
-      {
-        id: 301,
-        time: "2026-06-22 14:00",
-        verdict: "중립",
-        summary: "가격은 지지선 위에 있으나 거래량 확인이 필요합니다.",
-        reasons: ["210,000원 지지", "기관 수급 개선", "낙폭 제한"],
-        risks: ["거래량 평균 하회", "성장주 변동성", "단기 방향성 부재"]
-      },
-      {
-        id: 302,
-        time: "2026-06-22 13:00",
-        verdict: "관망",
-        summary: "명확한 수급 신호가 없어 관찰이 필요한 구간입니다.",
-        reasons: ["지지선 근접", "매도 압력 완화", "업종 보합"],
-        risks: ["수급 공백", "저항선 미돌파", "시장 민감도"]
-      }
-    ]
-  },
-  {
-    symbol: "005380.KS",
-    name: "현대차",
-    price: 281000,
-    change: 0.72,
-    volumeRatio: "1.2x",
-    low20: "276,000",
-    high20: "286,000",
-    alertStatus: "대기",
-    alertDetail: "장중 조건 재확인 필요",
-    matchedAlerts: ["기관 순매수"],
-    dataTime: "2026-06-22 13:55 KST",
-    analyses: [
-      {
-        id: 401,
-        time: "2026-06-22 14:00",
-        verdict: "상승",
-        summary: "실적 기대와 안정적인 수급이 완만한 상승을 지지합니다.",
-        reasons: ["기관 순매수", "주요 이동평균선 상단", "거래량 점진적 증가"],
-        risks: ["환율 변동", "자동차 수요 둔화", "단기 저항선 근접"]
-      },
-      {
-        id: 402,
-        time: "2026-06-22 13:00",
-        verdict: "중립",
-        summary: "추세는 유지되지만 저항선 확인이 필요합니다.",
-        reasons: ["지지선 유지", "기관 수급 양호", "낙폭 제한"],
-        risks: ["상단 매물", "환율 민감도", "거래량 부족"]
-      }
-    ]
-  }
-];
+const backend = window.desktop?.backend;
+const state = {
+  stocks: [],
+  selectedSymbol: null,
+  selectedAnalysis: null,
+  analysisHistory: [],
+  analysisDetails: new Map(),
+  alertConditions: []
+};
 
-let selectedSymbol = stockData[0].symbol;
-let selectedAnalysisId = stockData[0].analyses[0].id;
-const currentStock = () => stockData.find((stock) => stock.symbol === selectedSymbol);
-const currentAnalysis = () => currentStock().analyses.find((item) => item.id === selectedAnalysisId) || currentStock().analyses[0];
+const formatDate = (value) => value
+  ? new Date(value).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false })
+  : "-";
+
+const asNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const optionalNumber = (value) => value == null ? null : asNumber(value);
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function emptyAnalysis(symbol = "-") {
+  return {
+    id: null,
+    symbol,
+    time: "분석 결과 없음",
+    verdict: "대기",
+    summary: "저장된 분석이 없습니다. 수동 분석 실행을 눌러 분석을 생성하세요.",
+    reasons: ["백엔드 분석 결과를 기다리고 있습니다."],
+    risks: ["Gemini API 키와 네트워크 연결이 필요할 수 있습니다."],
+    supportLevels: {},
+    shouldAlert: false,
+    triggeredAlerts: [],
+    alertReason: "알림 조건 미확인",
+    dataTimestamp: null
+  };
+}
+
+function normalizeAnalysis(result) {
+  return {
+    id: result.id,
+    symbol: result.symbol,
+    time: formatDate(result.analyzed_at),
+    verdict: result.overall_judgment,
+    summary: result.summary,
+    reasons: result.key_reasons || [],
+    risks: result.risk_factors || [],
+    supportLevels: result.support_levels || {},
+    shouldAlert: Boolean(result.should_alert),
+    triggeredAlerts: result.triggered_alerts || [],
+    alertReason: result.alert_reason || "알림 조건 미충족",
+    dataTimestamp: result.data_timestamp
+  };
+}
+
+function normalizeHistoryItem(result) {
+  return {
+    id: result.id,
+    symbol: result.symbol,
+    time: formatDate(result.analyzed_at),
+    verdict: result.overall_judgment,
+    summary: result.summary,
+    reasons: [],
+    risks: [],
+    supportLevels: {},
+    shouldAlert: Boolean(result.should_alert),
+    triggeredAlerts: result.triggered_alerts || [],
+    alertReason: result.should_alert ? "알림 조건 충족" : "알림 조건 미충족",
+    dataTimestamp: result.data_timestamp
+  };
+}
+
+function selectedStockView() {
+  const selected = state.stocks.find((stock) => stock.symbol === state.selectedSymbol);
+  const analysis = state.selectedAnalysis || emptyAnalysis(state.selectedSymbol || "-");
+  const indicators = analysis.supportLevels || {};
+  return {
+    symbol: selected?.symbol || analysis.symbol || "-",
+    name: selected?.name || selected?.symbol || analysis.symbol || "선택된 종목 없음",
+    price: optionalNumber(indicators.latest_close),
+    change: optionalNumber(indicators.change_percent),
+    volumeRatio: indicators.volume_ratio_20 == null ? "-" : `${asNumber(indicators.volume_ratio_20).toFixed(2)}x`,
+    low20: indicators.low_20 == null ? "-" : new Intl.NumberFormat("ko-KR").format(asNumber(indicators.low_20)),
+    high20: indicators.high_20 == null ? "-" : new Intl.NumberFormat("ko-KR").format(asNumber(indicators.high_20)),
+    alertStatus: analysis.shouldAlert ? "전송 대상" : "조건 미충족",
+    alertDetail: analysis.alertReason,
+    matchedAlerts: analysis.triggeredAlerts,
+    dataTime: formatDate(analysis.dataTimestamp),
+    analyses: state.analysisHistory
+  };
+}
 
 function renderScreen() {
-  const stock = currentStock();
-  const analysis = currentAnalysis();
-  renderWatchlist(stockData, selectedSymbol, selectStock);
-  renderAnalysis(stock, analysis);
-  renderHistory(stock, selectedAnalysisId, selectAnalysis);
+  const stock = selectedStockView();
+  renderWatchlist(state.stocks, state.selectedSymbol, selectStock, deleteWatchlistItem);
+  renderAnalysis(stock, state.selectedAnalysis || emptyAnalysis(stock.symbol));
+  renderHistory(stock, state.selectedAnalysis?.id, selectAnalysis);
+  renderAlertConditions(state.alertConditions, deleteAlertCondition);
 }
 
-function selectStock(symbol) {
-  selectedSymbol = symbol;
-  selectedAnalysisId = currentStock().analyses[0].id;
-  renderScreen();
-  showToast(`GET /stocks/${symbol}/analysis/latest 결과를 표시합니다.`);
+async function loadWatchlist() {
+  const items = await backend.listWatchlist();
+  state.stocks = items.map((item) => ({
+    ...item,
+    name: item.symbol,
+    alertStatus: item.symbol === state.selectedSymbol ? "불러오는 중" : "분석 대기"
+  }));
+  if (!state.stocks.some((stock) => stock.symbol === state.selectedSymbol)) {
+    state.selectedSymbol = state.stocks[0]?.symbol || null;
+  }
+  if (state.selectedSymbol) {
+    await loadSelectedAnalysis();
+  } else {
+    state.selectedAnalysis = null;
+    state.analysisHistory = [];
+    renderScreen();
+  }
 }
 
-function selectAnalysis(analysisId) {
-  selectedAnalysisId = analysisId;
+async function loadSelectedAnalysis() {
+  const symbol = state.selectedSymbol;
+  if (!symbol) return;
+  document.querySelector("#scheduler-status").textContent = "데이터 조회 중";
+  try {
+    const [latestResult, historyResult] = await Promise.all([
+      backend.latestAnalysis(symbol),
+      backend.analysisHistory(symbol)
+    ]);
+    if (state.selectedSymbol !== symbol) return;
+    const latest = normalizeAnalysis(latestResult);
+    state.analysisDetails.set(latest.id, latest);
+    state.selectedAnalysis = latest;
+    state.analysisHistory = historyResult.map(normalizeHistoryItem);
+    if (!state.analysisHistory.some((item) => item.id === latest.id)) {
+      state.analysisHistory.unshift(latest);
+    }
+    document.querySelector("#scheduler-status").textContent = "대기";
+    const stock = state.stocks.find((item) => item.symbol === symbol);
+    if (stock) stock.alertStatus = latest.shouldAlert ? "전송 대상" : "조건 미충족";
+    renderScreen();
+  } catch (error) {
+    if (state.selectedSymbol !== symbol) return;
+    state.selectedAnalysis = emptyAnalysis(symbol);
+    state.analysisHistory = [];
+    document.querySelector("#scheduler-status").textContent = "조회 실패";
+    renderScreen();
+    showToast(`분석 조회 실패: ${errorMessage(error)}`);
+  }
+}
+
+async function selectStock(symbol) {
+  state.selectedSymbol = symbol;
+  state.selectedAnalysis = null;
+  state.analysisHistory = [];
   renderScreen();
-  showToast(`GET /stocks/${selectedSymbol}/analysis/${analysisId} 상세를 표시합니다.`);
+  await loadSelectedAnalysis();
+  showView("analysis-view");
+}
+
+async function selectAnalysis(analysisId) {
+  const cached = state.analysisDetails.get(analysisId);
+  if (cached) {
+    state.selectedAnalysis = cached;
+    renderScreen();
+    showView("analysis-view");
+    return;
+  }
+  try {
+    const result = await backend.analysisById(state.selectedSymbol, analysisId);
+    const analysis = normalizeAnalysis(result);
+    state.analysisDetails.set(analysisId, analysis);
+    state.selectedAnalysis = analysis;
+    renderScreen();
+    showView("analysis-view");
+  } catch (error) {
+    showToast(`이력 상세 조회 실패: ${errorMessage(error)}`);
+  }
+}
+
+async function deleteWatchlistItem(symbol) {
+  try {
+    await backend.deleteWatchlist(symbol);
+    showToast(`${symbol}을 관심종목에서 삭제했습니다.`);
+    await loadWatchlist();
+  } catch (error) {
+    showToast(`관심종목 삭제 실패: ${errorMessage(error)}`);
+  }
+}
+
+async function loadAlertConditions() {
+  state.alertConditions = await backend.listAlertConditions();
+  renderAlertConditions(state.alertConditions, deleteAlertCondition);
+}
+
+async function deleteAlertCondition(conditionId) {
+  try {
+    await backend.deleteAlertCondition(conditionId);
+    showToast(`알림 조건 #${conditionId}을 삭제했습니다.`);
+    await loadAlertConditions();
+  } catch (error) {
+    showToast(`알림 조건 삭제 실패: ${errorMessage(error)}`);
+  }
 }
 
 document.querySelector("#app").innerHTML = AppShell(`
-  <section class="workspace-grid">
-    ${WatchlistPanel()}
-    ${AnalysisWorkspace()}
-  </section>
+  <div class="view-stack">
+    <section id="watchlist-view" class="app-view">${WatchlistPanel()}</section>
+    <section id="analysis-view" class="app-view" hidden>${AnalysisOverview()}</section>
+    <section id="history-view" class="app-view" hidden><div class="analysis-workspace">${AnalysisHistoryPanel()}</div></section>
+    <section id="alerts-view" class="app-view" hidden><div class="analysis-workspace">${AlertConditionsPanel()}</div></section>
+  </div>
 `);
 
-document.querySelector("#search-form").addEventListener("submit", (event) => {
+function showView(viewId) {
+  document.querySelectorAll(".app-view").forEach((view) => {
+    view.hidden = view.id !== viewId;
+  });
+  document.querySelectorAll(".flow-step").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === viewId);
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+document.querySelector("#search-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const query = document.querySelector("#search-input").value.trim().toLowerCase();
-  const match = stockData.find((stock) => stock.name.toLowerCase().includes(query) || stock.symbol.toLowerCase().includes(query));
+  const input = document.querySelector("#search-input");
+  const query = input.value.trim().toUpperCase();
+  const match = state.stocks.find((stock) => stock.symbol.includes(query) || stock.name.toUpperCase().includes(query));
   if (!query || !match) {
-    showToast("현재 mock 관심종목에서 찾지 못했습니다.");
+    showToast("관심종목에서 일치하는 종목을 찾지 못했습니다.");
     return;
   }
-  selectStock(match.symbol);
-  document.querySelector("#search-input").value = "";
+  input.value = "";
+  await selectStock(match.symbol);
 });
 
-document.querySelector("#add-symbol-form").addEventListener("submit", (event) => {
+document.querySelector("#add-symbol-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const input = document.querySelector("#add-symbol-input");
   const rawSymbol = input.value.trim().toUpperCase();
@@ -189,62 +260,98 @@ document.querySelector("#add-symbol-form").addEventListener("submit", (event) =>
     return;
   }
   const symbol = rawSymbol.includes(".") ? rawSymbol : `${rawSymbol}.KS`;
-  if (stockData.some((stock) => stock.symbol === symbol)) {
-    showToast("이미 관심종목에 있는 코드입니다.");
+  try {
+    await backend.addWatchlist(symbol);
+    state.selectedSymbol = symbol;
+    input.value = "";
+    showToast(`${symbol}을 관심종목에 추가했습니다.`);
+    await loadWatchlist();
+  } catch (error) {
+    showToast(`관심종목 추가 실패: ${errorMessage(error)}`);
+  }
+});
+
+document.querySelector("#latest-button").addEventListener("click", async () => {
+  await loadSelectedAnalysis();
+  showView("analysis-view");
+});
+
+document.querySelector("#run-analysis-button").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  document.querySelector("#scheduler-status").textContent = "실행 중";
+  try {
+    const result = await backend.runScheduler();
+    const analyzed = result.symbols_analyzed?.length || 0;
+    const failed = result.symbols_failed?.length || 0;
+    showToast(`스케줄러 완료: 성공 ${analyzed}개, 실패 ${failed}개`);
+    await loadSelectedAnalysis();
+  } catch (error) {
+    document.querySelector("#scheduler-status").textContent = "실패";
+    showToast(`스케줄러 실행 실패: ${errorMessage(error)}`);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.querySelector("#alert-condition-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const symbolInput = document.querySelector("#alert-symbol-input");
+  const ruleInput = document.querySelector("#alert-rule-input");
+  const status = document.querySelector("#alert-condition-status");
+  const symbol = (symbolInput.value.trim() || state.selectedSymbol || "").toUpperCase();
+  const rule = ruleInput.value.trim();
+  if (!symbol || !rule) {
+    status.textContent = "종목 코드와 알림 조건을 입력하세요.";
     return;
   }
-  const id = 500 + stockData.length;
-  stockData.push({
-    symbol,
-    name: "데모 종목",
-    price: 100000,
-    change: 0,
-    volumeRatio: "1.0x",
-    low20: "98,000",
-    high20: "102,000",
-    alertStatus: "조건 미충족",
-    alertDetail: "새로 추가된 mock 항목",
-    matchedAlerts: [],
-    dataTime: "2026-06-22 14:00 KST",
-    analyses: [{
-      id,
-      time: "2026-06-22 14:00",
-      verdict: "중립",
-      summary: "새로 추가한 데모 종목의 mock 분석입니다.",
-      reasons: ["관심종목 추가 동작 확인", "POST /watchlist 예정 흐름", "API 연동 전 UI 상태"],
-      risks: ["실제 시세 아님", "AI 분석 아님", "앱 재시작 시 초기화"]
-    }]
+  status.textContent = "Gemini로 조건을 검증하고 있습니다...";
+  try {
+    const condition = await backend.addAlertCondition(symbol, rule);
+    ruleInput.value = "";
+    status.textContent = condition.validation_summary;
+    await loadAlertConditions();
+    showToast(`알림 조건 #${condition.id}을 저장했습니다.`);
+  } catch (error) {
+    status.textContent = `저장 실패: ${errorMessage(error)}`;
+  }
+});
+
+document.querySelector("#kakao-login-button").addEventListener("click", async () => {
+  try {
+    await backend.openKakaoLogin();
+    showToast("브라우저에서 카카오 로그인을 완료하세요.");
+  } catch (error) {
+    showToast(`카카오 로그인 열기 실패: ${errorMessage(error)}`);
+  }
+});
+
+document.querySelectorAll(".flow-step").forEach((button) => {
+  button.addEventListener("click", () => {
+    showView(button.dataset.view);
   });
-  input.value = "";
-  selectStock(symbol);
 });
 
-document.querySelector("#latest-button").addEventListener("click", () => {
-  selectedAnalysisId = currentStock().analyses[0].id;
-  renderScreen();
-  showToast("최신 분석 결과로 돌아왔습니다.");
-});
-
-document.querySelector("#run-analysis-button").addEventListener("click", (event) => {
-  const runButton = event.currentTarget;
-  runButton.disabled = true;
-  document.querySelector("#scheduler-status").textContent = "실행 중";
-  showToast("POST /scheduler/run?force=true mock 실행 중입니다.");
-  window.setTimeout(() => {
-    const stock = currentStock();
-    stock.dataTime = new Date().toLocaleString("ko-KR", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false
-    });
-    document.querySelector("#scheduler-status").textContent = "완료";
-    runButton.disabled = false;
+async function initialize() {
+  if (!backend) {
+    document.querySelector("#backend-connection").textContent = "BACKEND 사용 불가";
+    document.querySelector("#backend-detail").textContent = "Electron preload API를 찾지 못했습니다.";
     renderScreen();
-    showToast("스케줄러 실행 결과를 mock 데이터로 반영했습니다.");
-  }, 700);
-});
+    return;
+  }
+  try {
+    const connection = await backend.status();
+    document.querySelector("#backend-connection").textContent = "BACKEND 연결됨";
+    document.querySelector("#backend-detail").textContent = connection.baseUrl;
+    await Promise.all([loadWatchlist(), loadAlertConditions()]);
+    document.querySelector("#alert-symbol-input").value = state.selectedSymbol || "";
+  } catch (error) {
+    document.querySelector("#backend-connection").textContent = "BACKEND 연결 실패";
+    document.querySelector("#backend-detail").textContent = errorMessage(error);
+    renderScreen();
+    showToast(`백엔드 연결 실패: ${errorMessage(error)}`);
+  }
+}
 
 renderScreen();
+initialize();

@@ -49,6 +49,7 @@ button:disabled { cursor: wait; opacity: .72; }
 
 .flow-nav { display: grid; gap: 10px; margin-top: 46px; }
 .flow-step {
+  width: 100%;
   padding: 12px 13px;
   border: 1px solid #254f44;
   border-radius: 12px;
@@ -56,8 +57,15 @@ button:disabled { cursor: wait; opacity: .72; }
   background: #173b32;
   font-size: 12px;
   font-weight: 700;
+  text-align: left;
 }
 .flow-step.active { color: #17332c; background: #d8f36a; border-color: #d8f36a; }
+
+.view-stack { min-width: 0; }
+.app-view[hidden] { display: none; }
+.app-view { min-width: 0; animation: view-in .18s ease-out; }
+.app-view > .watchlist-card { position: static; min-height: 0; }
+@keyframes view-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
 .demo-notice { margin-top: auto; padding: 15px; border: 1px solid #2a5147; border-radius: 14px; background: #183a32; }
 .demo-notice div { color: #d8f36a; font-size: 10px; letter-spacing: .9px; }
@@ -86,6 +94,8 @@ h1 { margin: 0; font-size: 27px; letter-spacing: -.6px; }
 .section-heading p { margin: 5px 0 0; color: #87968f; font-size: 11px; }
 
 .watchlist { margin-top: 14px; display: grid; gap: 8px; }
+.watchlist-row { display: grid; grid-template-columns: minmax(0, 1fr) 30px; gap: 4px; border: 1px solid transparent; border-radius: 12px; }
+.watchlist-row.active { border-color: #a7c2b7; background: #eef5f1; }
 .watchlist-item {
   width: 100%;
   display: grid;
@@ -100,7 +110,9 @@ h1 { margin: 0; font-size: 27px; letter-spacing: -.6px; }
   text-align: left;
 }
 .watchlist-item:hover { background: #f6f9f7; }
-.watchlist-item.active { border-color: #a7c2b7; background: #eef5f1; }
+.watchlist-row.active .watchlist-item { background: transparent; }
+.watchlist-remove { border: 0; border-radius: 9px; color: #8b9a95; background: transparent; font-size: 18px; }
+.watchlist-remove:hover { color: #b44747; background: #faeeee; }
 .stock-label strong, .stock-label small { display: block; }
 .stock-label strong { font-size: 13px; }
 .stock-label small { margin-top: 4px; color: #83938d; font-size: 11px; }
@@ -159,6 +171,20 @@ h1 { margin: 0; font-size: 27px; letter-spacing: -.6px; }
 .history-summary { overflow: hidden; color: #536761; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .history-arrow { color: #82938d; font-size: 17px; }
 
+.alert-conditions-card { padding: 20px; }
+.alert-heading { align-items: center; }
+.alert-condition-form { display: grid; grid-template-columns: 160px minmax(0, 1fr) auto; gap: 10px; margin-top: 18px; }
+.alert-condition-form input, .alert-condition-form textarea { padding: 11px 12px; border: 1px solid #dce5e1; border-radius: 10px; outline: none; color: #17332c; background: #fff; font: inherit; font-size: 11px; }
+.alert-condition-form textarea { min-height: 43px; resize: vertical; }
+.condition-status { min-height: 18px; margin: 10px 3px 0; color: #687b74; font-size: 11px; }
+.alert-condition-list { display: grid; gap: 8px; margin-top: 10px; }
+.alert-condition-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 13px 12px; border: 1px solid #e3eae7; border-radius: 11px; background: #fafcfb; }
+.alert-condition-item strong { font-size: 12px; }
+.alert-condition-item p { margin: 6px 0; color: #455c54; font-size: 11px; }
+.alert-condition-item small { color: #82938d; font-size: 10px; }
+.danger-text { color: #b44747; }
+.empty-state { margin: 4px; color: #82938d; font-size: 11px; }
+
 .toast { position: fixed; right: 36px; bottom: 34px; padding: 12px 17px; border-radius: 11px; color: #fff; background: #173f35; box-shadow: 0 10px 30px rgba(23,63,53,.22); font-size: 12px; opacity: 0; transform: translateY(12px); pointer-events: none; transition: .2s ease; }
 .toast.show { opacity: 1; transform: translateY(0); }
 
@@ -177,5 +203,6 @@ h1 { margin: 0; font-size: 27px; letter-spacing: -.6px; }
   .workspace-grid { grid-template-columns: 1fr; }
   .watchlist-card { position: static; min-height: auto; }
   .detail-grid { grid-template-columns: 1fr; }
+  .alert-condition-form { grid-template-columns: 1fr; }
   .history-table-head, .history-item { grid-template-columns: 45px 130px 60px minmax(0, 1fr) 18px; }
 }

@@ -1,7 +1,7 @@
 (() => {
 function WatchlistPanel() {
   return `
-    <aside class="watchlist-card card">
+    <aside id="watchlist-section" class="watchlist-card card">
       <div class="section-heading">
         <div><h2>관심종목</h2><p>API: GET /watchlist</p></div>
         <span id="watchlist-count"></span>
@@ -14,17 +14,26 @@ function WatchlistPanel() {
     </aside>`;
 }
 
-function renderWatchlist(stocks, selectedSymbol, onSelect) {
+function renderWatchlist(stocks, selectedSymbol, onSelect, onDelete) {
   const list = document.querySelector("#watchlist");
   list.replaceChildren(...stocks.map((stock) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `watchlist-item${stock.symbol === selectedSymbol ? " active" : ""}`;
-    button.innerHTML = `
+    const row = document.createElement("div");
+    row.className = `watchlist-row${stock.symbol === selectedSymbol ? " active" : ""}`;
+    const selectButton = document.createElement("button");
+    selectButton.type = "button";
+    selectButton.className = "watchlist-item";
+    selectButton.innerHTML = `
       <span class="stock-label"><strong>${stock.symbol}</strong><small>${stock.name}</small></span>
       <span class="stock-alert">${stock.alertStatus}</span>`;
-    button.addEventListener("click", () => onSelect(stock.symbol));
-    return button;
+    selectButton.addEventListener("click", () => onSelect(stock.symbol));
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "watchlist-remove";
+    deleteButton.setAttribute("aria-label", `${stock.symbol} 관심종목 삭제`);
+    deleteButton.textContent = "×";
+    deleteButton.addEventListener("click", () => onDelete(stock.symbol));
+    row.append(selectButton, deleteButton);
+    return row;
   }));
   document.querySelector("#watchlist-count").textContent = `${stocks.length}개`;
 }

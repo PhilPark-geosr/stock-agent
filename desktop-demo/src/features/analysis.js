@@ -7,29 +7,28 @@ function verdictClass(verdict) {
   return "verdict-watch";
 }
 
-function AnalysisWorkspace() {
+function AnalysisOverview() {
   return `
     <div class="analysis-workspace">
       <section class="status-strip">
         <article class="status-card"><span>선택 종목</span><strong id="selected-symbol"></strong><small id="selected-name"></small></article>
         <article class="status-card"><span>스케줄러</span><strong id="scheduler-status">대기</strong><small>POST /scheduler/run?force=true</small></article>
-        <article class="status-card"><span>데이터 기준</span><strong id="data-time"></strong><small>mock 시세 스냅샷</small></article>
+        <article class="status-card"><span>데이터 기준</span><strong id="data-time"></strong><small>yfinance 시세 스냅샷</small></article>
         <article class="status-card"><span>알림</span><strong id="alert-status"></strong><small id="alert-detail"></small></article>
       </section>
-      <section class="analysis-card card">
+      <section id="latest-analysis-section" class="analysis-card card">
         <div class="analysis-header">
           <div><p id="analysis-time" class="eyebrow"></p><div class="analysis-title-row"><span id="verdict" class="verdict"></span><h2 id="hero-symbol-name"></h2></div></div>
           <div class="price-block"><span>현재가</span><strong id="current-price"></strong><em id="price-change"></em></div>
         </div>
         <p id="analysis-summary" class="analysis-summary"></p>
-        <p class="disclaimer">AI 분석은 투자 조언이 아닌 참고 정보입니다. 데모에서는 고정된 mock 응답을 사용합니다.</p>
+        <p class="disclaimer">AI 분석은 투자 조언이 아닌 참고 정보입니다. 결과는 FastAPI가 저장한 최신 분석 데이터입니다.</p>
       </section>
       <section class="detail-grid">
         ${InsightPanel("핵심 근거", "AgentAnalysisResult.key_reasons", "reason-list")}
         ${InsightPanel("위험 요인", "AgentAnalysisResult.risk_factors", "risk-list", true)}
       </section>
       ${MetricsPanel()}
-      ${AnalysisHistory()}
     </div>`;
 }
 
@@ -46,8 +45,8 @@ function MetricsPanel() {
   </section>`;
 }
 
-function AnalysisHistory() {
-  return `<section class="card history-card">
+function AnalysisHistoryPanel() {
+  return `<section id="history-section" class="card history-card">
     <div class="section-heading"><div><h2>분석 이력</h2><p>API: GET /stocks/{symbol}/analysis</p></div><button id="latest-button" class="text-button" type="button">최신 분석 보기</button></div>
     <div class="history-table-head" aria-hidden="true"><span>ID</span><span>분석 시각</span><span>판단</span><span>요약</span><span></span></div>
     <div id="history-list" class="history-list"></div>
@@ -60,18 +59,20 @@ function renderList(selector, items) {
 
 function renderAnalysis(stock, analysis) {
   const verdict = document.querySelector("#verdict");
-  const sign = stock.change >= 0 ? "+" : "";
+  const hasChange = Number.isFinite(stock.change);
+  const sign = hasChange && stock.change >= 0 ? "+" : "";
   document.querySelector("#selected-symbol").textContent = stock.symbol;
   document.querySelector("#selected-name").textContent = stock.name;
-  document.querySelector("#analysis-time").textContent = `${analysis.id === stock.analyses[0].id ? "LATEST ANALYSIS" : "HISTORY DETAIL"} · ${analysis.time}`;
+  const isLatest = !stock.analyses.length || analysis.id === stock.analyses[0].id;
+  document.querySelector("#analysis-time").textContent = `${isLatest ? "LATEST ANALYSIS" : "HISTORY DETAIL"} · ${analysis.time}`;
   verdict.textContent = analysis.verdict;
   verdict.className = `verdict ${verdictClass(analysis.verdict)}`;
   document.querySelector("#hero-symbol-name").textContent = `${stock.name} (${stock.symbol})`;
   document.querySelector("#analysis-summary").textContent = analysis.summary;
-  document.querySelector("#current-price").textContent = `${formatPrice(stock.price)}원`;
+  document.querySelector("#current-price").textContent = Number.isFinite(stock.price) ? `${formatPrice(stock.price)}원` : "-";
   const change = document.querySelector("#price-change");
-  change.textContent = `${stock.change >= 0 ? "▲" : "▼"} ${sign}${stock.change.toFixed(2)}%`;
-  change.className = stock.change >= 0 ? "positive" : "negative";
+  change.textContent = hasChange ? `${stock.change >= 0 ? "▲" : "▼"} ${sign}${stock.change.toFixed(2)}%` : "-";
+  change.className = hasChange ? (stock.change >= 0 ? "positive" : "negative") : "";
   document.querySelector("#volume-ratio").textContent = stock.volumeRatio;
   document.querySelector("#low-price").textContent = `${stock.low20}원`;
   document.querySelector("#high-price").textContent = `${stock.high20}원`;
@@ -85,6 +86,10 @@ function renderAnalysis(stock, analysis) {
 
 function renderHistory(stock, selectedAnalysisId, onSelect) {
   const list = document.querySelector("#history-list");
+  if (!stock.analyses.length) {
+    list.innerHTML = '<p class="empty-state">저장된 분석 이력이 없습니다.</p>';
+    return;
+  }
   list.replaceChildren(...stock.analyses.map((analysis) => {
     const button = document.createElement("button");
     button.type = "button";
@@ -95,5 +100,5 @@ function renderHistory(stock, selectedAnalysisId, onSelect) {
   }));
 }
 
-window.StockAgent = { ...window.StockAgent, AnalysisWorkspace, renderAnalysis, renderHistory };
+window.StockAgent = { ...window.StockAgent, AnalysisOverview, AnalysisHistoryPanel, renderAnalysis, renderHistory };
 })();

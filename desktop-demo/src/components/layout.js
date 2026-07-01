@@ -6,17 +6,17 @@ function Sidebar() {
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 32 32"><path d="M7 20l6-7 5 4 8-10"/><path d="M21 7h5v5"/></svg>
         </span>
-        <span><strong>STOCK AGENT</strong><small>OFFLINE DEMO</small></span>
+        <span><strong>STOCK AGENT</strong><small>DESKTOP CLIENT</small></span>
       </div>
-      <nav class="flow-nav" aria-label="데모 흐름">
-        <span class="flow-step active">1. 관심종목 선택</span>
-        <span class="flow-step">2. 최신 분석 확인</span>
-        <span class="flow-step">3. 이력 비교</span>
-        <span class="flow-step">4. 알림 상태 확인</span>
+      <nav class="flow-nav" aria-label="주요 화면">
+        <button class="flow-step active" type="button" data-view="watchlist-view">1. 관심종목 선택</button>
+        <button class="flow-step" type="button" data-view="analysis-view">2. 최신 분석 확인</button>
+        <button class="flow-step" type="button" data-view="history-view">3. 이력 비교</button>
+        <button class="flow-step" type="button" data-view="alerts-view">4. 알림 상태 확인</button>
       </nav>
       <div class="demo-notice">
-        <div><span class="status-dot"></span><strong>MOCK MODE</strong></div>
-        <p>FastAPI, SQLite, Gemini, yfinance, Kakao API와 연결하지 않은 화면 검증용 앱입니다.</p>
+        <div><span class="status-dot"></span><strong id="backend-connection">BACKEND 연결 중</strong></div>
+        <p id="backend-detail">로컬 FastAPI 상태를 확인하고 있습니다.</p>
       </div>
     </aside>`;
 }
@@ -26,8 +26,8 @@ function Topbar() {
     <header class="topbar">
       <div>
         <p class="eyebrow">ANALYSIS DASHBOARD</p>
-        <h1>관심종목 분석 데모</h1>
-        <p class="subtitle">현재 구현된 기능을 기준으로 관심종목, 최신 분석, 분석 이력, 카카오 알림 상태를 확인합니다.</p>
+        <h1>관심종목 분석</h1>
+        <p class="subtitle">FastAPI와 연결된 관심종목, 최신 분석, 분석 이력, 사용자 알림 조건을 관리합니다.</p>
       </div>
       <div class="topbar-actions">
         <form id="search-form" class="search-form" role="search">
