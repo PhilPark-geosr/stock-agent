@@ -89,7 +89,7 @@ def test_run_scheduled_batch_empty_watchlist(db_session):
     assert result.skipped_reason == "empty_watchlist"
 
 
-def test_alert_sent_only_once_for_same_conditions(db_session, alert_notifier):
+def test_alert_sent_only_once_for_same_conditions(db_session, market_data, alert_notifier):
     WatchlistRepository(db_session).add("005930.KS")
     from app.schemas import AnalysisResult
 
@@ -110,6 +110,7 @@ def test_alert_sent_only_once_for_same_conditions(db_session, alert_notifier):
     )
     service = build_analysis_service(
         db_session,
+        market_data_provider=market_data,
         agent=agent,
         alert_notifier=alert_notifier,
         now_provider=lambda: ALERT_WINDOW_UTC,

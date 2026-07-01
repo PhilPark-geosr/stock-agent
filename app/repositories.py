@@ -146,6 +146,32 @@ class AnalysisRepository:
         )
         return self.db.scalar(statement)
 
+    def list_by_symbol(
+        self,
+        symbol: str,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[AnalysisResult]:
+        normalized = normalize_symbol(symbol)
+        statement = (
+            select(AnalysisResult)
+            .where(AnalysisResult.symbol == normalized)
+            .order_by(AnalysisResult.analyzed_at.desc(), AnalysisResult.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(self.db.scalars(statement))
+
+    def get_by_id(self, symbol: str, result_id: int) -> AnalysisResult | None:
+        normalized = normalize_symbol(symbol)
+        statement = (
+            select(AnalysisResult)
+            .where(AnalysisResult.symbol == normalized)
+            .where(AnalysisResult.id == result_id)
+        )
+        return self.db.scalar(statement)
+
     def save(
         self,
         *,

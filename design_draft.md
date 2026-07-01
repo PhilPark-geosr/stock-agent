@@ -24,6 +24,7 @@
 **3. 주식 분석 결과 확인**
 
 - 백그라운드에서 AI가 관심종목에 대한 데이터를 분석한 내용을 대시보드에서 조회 및 확인한다
+- 최신 분석 1건과 스케줄러가 저장한 **이전 분석 이력**을 목록·상세로 확인할 수 있다
 
 **4. 조건부 분석 알림 발송 (Refined Version)**
 
@@ -44,7 +45,7 @@
 - 관심종목 등록 및 삭제
 - 장중 1시간 단위 관심종목 분석
 - 금융 데이터 조회 및 분석 결과 생성
-- 대시보드에서 최신 분석 결과 조회
+- 대시보드에서 최신·이전 분석 결과 조회
 - 시스템 기본 알림조건 및 사용자 알림조건 평가
 - 조건 충족 시 외부 알림 서비스로 알림 발송
 
@@ -227,7 +228,7 @@ sequenceDiagram
 
 ## 구현 클래스 다이어그램
 
-아래 다이어그램은 현재 구현에서 중요한 협력 관계만 표현한다. 핵심은 `AnalysisService`가 최신 분석결과 조회를 담당하고, 저장된 결과가 없을 때만 금융 데이터 조회와 Gemini 분석을 수행한 뒤 저장소에 결과를 남긴다는 점이다.
+아래 다이어그램은 현재 구현에서 중요한 협력 관계만 표현한다. 핵심은 `AnalysisService`가 최신 분석결과 조회를 담당하고, 저장된 결과가 없을 때만 금융 데이터 조회와 Gemini 분석을 수행한 뒤 저장소에 결과를 남긴다는 점이다. 이력 조회는 `list_analysis_history`·`get_analysis_by_id`로 DB만 읽는다.
 
 ```mermaid
 classDiagram
@@ -257,13 +258,19 @@ classDiagram
     Routes : list_watchlist_items()
     Routes : delete_watchlist_item()
     Routes : get_latest_analysis()
+    Routes : list_analysis_history()
+    Routes : get_analysis_by_id()
 
     AnalysisProvider : get_latest_analysis(symbol)
+    AnalysisProvider : list_analysis_history(symbol)
+    AnalysisProvider : get_analysis_by_id(symbol, result_id)
 
     AnalysisService : analysis_repository
     AnalysisService : market_data_provider
     AnalysisService : agent
     AnalysisService : get_latest_analysis(symbol)
+    AnalysisService : list_analysis_history(symbol)
+    AnalysisService : get_analysis_by_id(symbol, result_id)
 
     WatchlistRepository : db
     WatchlistRepository : list()
@@ -273,6 +280,8 @@ classDiagram
 
     AnalysisRepository : db
     AnalysisRepository : get_latest(symbol)
+    AnalysisRepository : list_by_symbol(symbol)
+    AnalysisRepository : get_by_id(symbol, result_id)
     AnalysisRepository : save()
 
     MarketDataProvider : fetch(symbol)

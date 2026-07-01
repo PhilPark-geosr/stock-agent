@@ -1,0 +1,17 @@
+{
+  "name": "stock-agent-electron-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop client for Stock Agent",
+  "main": "main.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check main.js && node --check preload.js && node --check src/renderer.js && node --check src/components/layout.js && node --check src/components/toast.js && node --check src/features/watchlist.js && node --check src/features/analysis.js && node --check src/features/alerts.js"
+  },
+  "devDependencies": {
+    "electron": "42.4.1"
+  }
+}

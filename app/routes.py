@@ -18,6 +18,7 @@ from app.market_data import MarketDataError
 from app.repositories import AlertConditionRepository, WatchlistRepository
 from app.rule_validation import GeminiRuleValidationAgent, RuleValidationAgent, RuleValidationError
 from app.schemas import (
+    AnalysisResultHistoryItem,
     AnalysisResultRead,
     CustomAlertConditionCreate,
     CustomAlertConditionRead,
@@ -185,6 +186,19 @@ def run_scheduler(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
+@router.get("/stocks/{symbol}/analysis", response_model=list[AnalysisResultHistoryItem])
+def list_analysis_history(
+    symbol: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    analysis_service: AnalysisProvider = Depends(get_analysis_service),
+):
+    try:
+        return analysis_service.list_analysis_history(symbol, limit=limit, offset=offset)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
 @router.get("/stocks/{symbol}/analysis/latest", response_model=AnalysisResultRead)
 def get_latest_analysis(
     symbol: str,
@@ -201,3 +215,17 @@ def get_latest_analysis(
     except KakaoNotifyError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return result
+
+
+@router.get("/stocks/{symbol}/analysis/{result_id}", response_model=AnalysisResultRead)
+def get_analysis_by_id(
+    symbol: str,
+    result_id: int,
+    analysis_service: AnalysisProvider = Depends(get_analysis_service),
+):
+    try:
+        return analysis_service.get_analysis_by_id(symbol, result_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

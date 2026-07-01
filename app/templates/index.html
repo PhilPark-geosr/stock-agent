@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -107,11 +107,45 @@
         background: white;
       }
 
+      button.history-item {
+        width: 100%;
+        margin-bottom: 8px;
+        border-color: #d7dde5;
+        color: #1c2733;
+        background: white;
+        text-align: left;
+      }
+
+      button.history-item.active {
+        border-color: #1f6feb;
+        background: #eef4ff;
+      }
+
       pre {
         min-height: 180px;
         overflow: auto;
         padding: 16px;
         white-space: pre-wrap;
+      }
+
+      .section-title {
+        margin: 28px 0 12px;
+        font-size: 1.1rem;
+      }
+
+      .meta {
+        color: #5b6775;
+        font-size: 0.92rem;
+        margin-bottom: 12px;
+      }
+
+      #history-list {
+        margin-bottom: 20px;
+      }
+
+      .empty-history {
+        color: #5b6775;
+        font-size: 0.95rem;
       }
 
       .status {
@@ -198,6 +232,8 @@
           <button type="submit">Lookup</button>
         </form>
         <pre id="result" aria-live="polite">Enter a symbol and run lookup.</pre>
+        <h3 class="section-title">이전 분석 이력</h3>
+        <div id="history-list" class="empty-history">No saved analysis history.</div>
       </section>
 
       <section>
@@ -228,8 +264,10 @@
       const conditionSymbolInput = document.querySelector("#condition-symbol");
       const userRuleInput = document.querySelector("#user-rule");
       const result = document.querySelector("#result");
+      const historyList = document.querySelector("#history-list");
       const conditionStatus = document.querySelector("#condition-status");
       const conditionList = document.querySelector("#condition-list");
+      let activeResultId = null;
 
       function formatError(body) {
         if (!body) {
@@ -252,29 +290,104 @@
         return JSON.parse(text);
       }
 
+      function formatKst(isoString) {
+        if (!isoString) return "-";
+        return new Date(isoString).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+      }
+
+      function renderDetail(body, label) {
+        const lines = [
+          `[${label}]`,
+          body.should_alert ? "카카오 알림: 전송 시도됨 (나와의 채팅 확인)" : "카카오 알림: 조건 미충족",
+          `분석 시각: ${formatKst(body.analyzed_at)}`,
+          "",
+          JSON.stringify(body, null, 2),
+        ];
+        result.textContent = lines.join("\n");
+      }
+
+      function renderHistory(items) {
+        if (!items.length) {
+          historyList.className = "empty-history";
+          historyList.textContent = "저장된 분석 이력이 없습니다. 스케줄러 실행 후 다시 조회하세요.";
+          return;
+        }
+
+        historyList.className = "";
+        historyList.innerHTML = "";
+        for (const item of items) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "history-item";
+          if (item.id === activeResultId) {
+            button.classList.add("active");
+          }
+          button.textContent = `${formatKst(item.analyzed_at)} · ${item.overall_judgment} · ${item.summary}`;
+          button.addEventListener("click", async () => {
+            const symbol = document.querySelector("#symbol").value.trim() || "005930.KS";
+            activeResultId = item.id;
+            renderHistory(items);
+            result.textContent = "이력 상세 불러오는 중...";
+            try {
+              const response = await fetch(
+                `/stocks/${encodeURIComponent(symbol)}/analysis/${item.id}`
+              );
+              const body = await readJson(response);
+              if (!response.ok) {
+                result.textContent = `Error ${response.status}: ${formatError(body)}`;
+                return;
+              }
+              renderDetail(body, `이력 #${item.id}`);
+            } catch (error) {
+              result.textContent = `이력 조회 실패: ${error}`;
+            }
+          });
+          historyList.appendChild(button);
+        }
+      }
+
+      async function lookupSymbol(symbol) {
+        conditionSymbolInput.value = symbol;
+        result.textContent = "불러오는 중...";
+        historyList.className = "empty-history";
+        historyList.textContent = "이력 불러오는 중...";
+        activeResultId = null;
+
+        try {
+          const [latestResponse, historyResponse] = await Promise.all([
+            fetch(`/stocks/${encodeURIComponent(symbol)}/analysis/latest`),
+            fetch(`/stocks/${encodeURIComponent(symbol)}/analysis?limit=20`),
+          ]);
+          const latestBody = await readJson(latestResponse);
+          const historyBody = await readJson(historyResponse);
+
+          if (!latestResponse.ok) {
+            result.textContent = `Error ${latestResponse.status}: ${formatError(latestBody)}`;
+            historyList.textContent = "이력을 불러오지 못했습니다.";
+            return;
+          }
+          if (!historyResponse.ok) {
+            renderDetail(latestBody, "최신");
+            historyList.textContent = `이력 조회 실패: ${formatError(historyBody)}`;
+            return;
+          }
+
+          activeResultId = latestBody.id;
+          renderDetail(latestBody, "최신");
+          renderHistory(historyBody);
+        } catch (error) {
+          result.textContent = `조회 실패: ${error}`;
+          historyList.textContent = "이력을 불러오지 못했습니다.";
+        }
+      }
+
       lookupForm.addEventListener("submit", async (event) => {
         event.preventDefault();
         const symbol = symbolInput.value.trim() || "005930.KS";
-        conditionSymbolInput.value = symbol;
-        result.textContent = "Loading...";
-
-        try {
-          const response = await fetch(`/stocks/${encodeURIComponent(symbol)}/analysis/latest`);
-          const body = await readJson(response);
-          if (!response.ok) {
-            result.textContent = `Error ${response.status}: ${formatError(body)}`;
-            return;
-          }
-          const lines = [
-            body.should_alert ? "Alert: triggered" : "Alert: not triggered",
-            "",
-            JSON.stringify(body, null, 2),
-          ];
-          result.textContent = lines.join("\n");
-        } catch (error) {
-          result.textContent = `Lookup failed: ${error}`;
-        }
+        await lookupSymbol(symbol);
       });
+
+      lookupSymbol(symbolInput.value.trim() || "005930.KS");
 
       conditionForm.addEventListener("submit", async (event) => {
         event.preventDefault();

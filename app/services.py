@@ -39,6 +39,18 @@ class AnalysisProvider(Protocol):
     def get_latest_analysis(self, symbol: str) -> StoredAnalysisResult:
         """Return the latest stored analysis, creating one when none exists."""
 
+    def list_analysis_history(
+        self,
+        symbol: str,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[StoredAnalysisResult]:
+        """Return stored analysis rows newest first."""
+
+    def get_analysis_by_id(self, symbol: str, result_id: int) -> StoredAnalysisResult:
+        """Return one stored analysis row by id."""
+
 
 class AnalysisService:
     def __init__(
@@ -72,6 +84,35 @@ class AnalysisService:
 
         stored = self.analyze_and_store(normalized_symbol)
         self._try_send_pending_alert(stored)
+        return stored
+
+    def list_analysis_history(
+        self,
+        symbol: str,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[StoredAnalysisResult]:
+        normalized_symbol = normalize_symbol(symbol)
+        if not normalized_symbol:
+            raise ValueError("symbol is required")
+        if limit < 1 or limit > 100:
+            raise ValueError("limit must be between 1 and 100")
+        if offset < 0:
+            raise ValueError("offset must be >= 0")
+        return self.analysis_repository.list_by_symbol(
+            normalized_symbol,
+            limit=limit,
+            offset=offset,
+        )
+
+    def get_analysis_by_id(self, symbol: str, result_id: int) -> StoredAnalysisResult:
+        normalized_symbol = normalize_symbol(symbol)
+        if not normalized_symbol:
+            raise ValueError("symbol is required")
+        stored = self.analysis_repository.get_by_id(normalized_symbol, result_id)
+        if stored is None:
+            raise LookupError("analysis result not found")
         return stored
 
     def analyze_and_store(self, symbol: str) -> StoredAnalysisResult:

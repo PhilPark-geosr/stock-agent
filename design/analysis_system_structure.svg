@@ -1,6 +1,6 @@
 <svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">주식 분석 시스템 내부 구조</title>
-  <desc id="desc">대시보드 앱은 최신 분석결과 조회 API를 호출하고, 분석 시스템은 저장소에 결과가 있으면 반환하며 없으면 금융 데이터 조회, 프롬프트 구성, AI 에이전트 분석, JSON 저장 후 결과를 반환한다.</desc>
+  <desc id="desc">대시보드 앱은 최신 분석결과 조회 API를 호출하고, 분석 시스템은 저장소에 결과가 있으면 반환하며 없으면 금융 데이터 조회, 프롬프트 구성, AI 에이전트 분석, JSON 저장 후 결과를 반환한다. 이력 조회는 저장소의 과거 행만 읽으며 재분석하지 않는다.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#27364a"/>
@@ -17,6 +17,7 @@
       .label { fill: #172033; font-family: "Malgun Gothic", "Apple SD Gothic Neo", Arial, sans-serif; font-size: 20px; font-weight: 700; }
       .small { fill: #4b5563; font-family: "Malgun Gothic", "Apple SD Gothic Neo", Arial, sans-serif; font-size: 14px; }
       .edge { stroke: #27364a; stroke-width: 2.4; fill: none; marker-end: url(#arrow); }
+      .edgeDashed { stroke: #1565c0; stroke-width: 2; fill: none; stroke-dasharray: 8 6; marker-end: url(#arrow); }
       .edgeText { fill: #26364d; font-family: "Malgun Gothic", "Apple SD Gothic Neo", Arial, sans-serif; font-size: 14px; font-weight: 600; }
       .note { fill: #344054; font-family: "Malgun Gothic", "Apple SD Gothic Neo", Arial, sans-serif; font-size: 16px; font-weight: 600; }
     </style>
@@ -24,18 +25,18 @@
 
   <rect class="bg" x="0" y="0" width="1280" height="720"/>
   <text class="title" x="52" y="58">주식 분석 시스템 내부 구조</text>
-  <text class="note" x="54" y="88">기본 흐름은 최신 분석결과 조회이며, 저장된 분석결과가 없을 때만 내부 분석을 실행한다.</text>
+  <text class="note" x="54" y="88">최신 조회: 저장된 결과가 없을 때만 내부 분석 실행. 이력 조회: 스케줄러가 쌓은 과거 행만 읽음.</text>
 
   <rect class="external" x="54" y="168" width="218" height="90"/>
   <text class="label" x="108" y="204">대시보드 앱</text>
-  <text class="small" x="85" y="231">관심종목 최신 분석결과 조회</text>
+  <text class="small" x="85" y="231">최신·이전 분석결과 조회</text>
 
   <rect class="boundary" x="322" y="112" width="650" height="520"/>
   <text class="label" x="570" y="150">주식 분석 시스템</text>
 
   <rect class="internal" x="370" y="188" width="206" height="78"/>
   <text class="label" x="415" y="221">분석결과 API</text>
-  <text class="small" x="394" y="246">최신 분석결과 조회</text>
+  <text class="small" x="394" y="246">최신·이력·상세 조회</text>
 
   <polygon class="decision" points="704,170 820,230 704,290 588,230"/>
   <text class="label" x="657" y="224">분석결과</text>
@@ -68,6 +69,9 @@
 
   <path class="edge" d="M272 213 L370 213"/>
   <text class="edgeText" x="286" y="198">최신 분석결과 조회</text>
+
+  <path class="edgeDashed" d="M272 228 C420 300, 900 300, 1044 400"/>
+  <text class="edgeText" x="520" y="292">이력 조회: 저장소 읽기 전용</text>
 
   <path class="edge" d="M576 225 L589 225"/>
 
