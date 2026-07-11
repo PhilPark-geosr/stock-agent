@@ -6,7 +6,7 @@ import math
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
-from .schemas import MarketDataSnapshot, MarketIndicators, OHLCVRecord
+from app.schemas import MarketDataSnapshot, MarketIndicators, OHLCVRecord
 
 
 class MarketDataError(RuntimeError):
@@ -211,4 +211,3 @@ def _optional_divide(left: float | int | None, right: float | int | None) -> flo
 def _optional_percent(numerator: float | None, denominator: float | None) -> float | None:
     ratio = _optional_divide(numerator, denominator)
     return ratio * 100 if ratio is not None else None
-

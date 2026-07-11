@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from app.custom_rule_tools.market import fetch_related_symbol_snapshot
-from app.custom_rule_tools.news import fetch_symbol_news
+from app.tools.custom_rule.market import fetch_related_symbol_snapshot
+from app.tools.custom_rule.news import fetch_symbol_news
 
 
 def get_custom_rule_tools():

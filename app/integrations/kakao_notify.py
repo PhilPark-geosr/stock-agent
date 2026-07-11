@@ -8,7 +8,7 @@ from typing import Protocol
 
 import httpx
 
-from app.kakao_auth import kakao_settings, persist_tokens_to_env, refresh_access_token
+from app.integrations.kakao_auth import kakao_settings, persist_tokens_to_env, refresh_access_token
 
 logger = logging.getLogger(__name__)
 

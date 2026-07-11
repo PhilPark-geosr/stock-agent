@@ -8,8 +8,8 @@ from typing import Any, Protocol
 
 import httpx
 
-from app.alert_conditions import RuleValidationResult, SUPPORTED_CUSTOM_RULE_TOOLS
-from app.agent import AgentConfigurationError
+from app.agents.agent import AgentConfigurationError
+from app.domain.alert_conditions import RuleValidationResult, SUPPORTED_CUSTOM_RULE_TOOLS
 from app.repositories import normalize_symbol
 from app.schemas import parse_model_json
 

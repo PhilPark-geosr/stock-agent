@@ -5,10 +5,10 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from app.core.trading_window import is_market_hours
 from app.repositories import AnalysisRepository, WatchlistRepository
-from app.scheduler import run_scheduled_batch
+from app.services.scheduler import run_scheduled_batch
 from app.services import build_analysis_service
-from app.trading_window import is_market_hours
 from tests.conftest import ALERT_WINDOW_UTC, FakeAnalysisAgent, FakeMarketDataProvider
 
 KST = ZoneInfo("Asia/Seoul")
@@ -143,7 +143,7 @@ def test_scheduler_run_endpoint(client, db_session, market_data, agent, alert_no
         now_provider=lambda: ALERT_WINDOW_UTC,
     )
 
-    with patch("app.scheduler.build_analysis_service", return_value=service):
+    with patch("app.services.scheduler.build_analysis_service", return_value=service):
         response = client.post("/scheduler/run?force=true")
 
     assert response.status_code == 200

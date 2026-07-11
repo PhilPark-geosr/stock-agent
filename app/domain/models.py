@@ -5,7 +5,7 @@ from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstrain
 from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.database import Base
+from app.core.database import Base
 
 
 def utc_now() -> datetime:

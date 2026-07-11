@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from app.agent import _parse_analysis_result
+from app.agents.agent import _parse_analysis_result
 from app.schemas import MarketDataSnapshot, MarketIndicators
 
 

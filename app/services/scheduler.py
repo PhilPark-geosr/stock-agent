@@ -10,9 +10,9 @@ from typing import Callable
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.scheduler_config import scheduler_settings
+from app.core.scheduler_config import scheduler_settings
+from app.core.trading_window import is_market_hours
 from app.services import AnalysisService, ScheduledBatchResult, build_analysis_service
-from app.trading_window import is_market_hours
 
 logger = logging.getLogger(__name__)
 

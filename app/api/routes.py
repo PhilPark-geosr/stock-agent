@@ -5,18 +5,19 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from app.agent import AgentConfigurationError, AnalysisAgentError
-from app.custom_rule_agent import CustomRuleAgentError
-from app.database import get_db
-from app.kakao_auth import (
+from app.agents.agent import AgentConfigurationError, AnalysisAgentError
+from app.agents.custom_rule_agent import CustomRuleAgentError
+from app.agents.rule_validation import GeminiRuleValidationAgent, RuleValidationAgent, RuleValidationError
+from app.core.database import get_db
+from app.integrations.kakao_auth import (
     KakaoAuthError,
     build_authorize_url,
     exchange_code_for_token,
     persist_tokens_to_env,
 )
-from app.market_data import MarketDataError
+from app.integrations.kakao_notify import KakaoNotifyError
+from app.integrations.market_data import MarketDataError
 from app.repositories import AlertConditionRepository, WatchlistRepository
-from app.rule_validation import GeminiRuleValidationAgent, RuleValidationAgent, RuleValidationError
 from app.schemas import (
     AnalysisResultRead,
     CustomAlertConditionCreate,
@@ -24,13 +25,12 @@ from app.schemas import (
     WatchlistCreate,
     WatchlistItemRead,
 )
-from app.kakao_notify import KakaoNotifyError
-from app.scheduler import run_scheduled_batch
+from app.services.scheduler import run_scheduled_batch
 from app.services import AnalysisProvider, ScheduledBatchResult, get_analysis_service
 
 
 router = APIRouter()
-templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
 
 
 @router.get("/", response_class=HTMLResponse)

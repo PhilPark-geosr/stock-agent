@@ -10,9 +10,9 @@ from typing import Any, Iterable, Protocol
 import httpx
 from pydantic import ValidationError
 
-from app.alert_conditions import AlertConditionUnion, DEFAULT_SYSTEM_ALERT_CONDITIONS
+from app.domain.alert_conditions import AlertConditionUnion, DEFAULT_SYSTEM_ALERT_CONDITIONS
 
-from .schemas import (
+from app.schemas import (
     AnalysisResult,
     MarketDataSnapshot,
     model_to_dict,

@@ -5,7 +5,7 @@ from collections.abc import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from app.settings import load_environment
+from app.core.settings import load_environment
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def get_db() -> Generator[Session, None, None]:
 def init_db() -> None:
     from sqlalchemy import inspect, text
 
-    from app import models  # noqa: F401
+    from app.domain import models  # noqa: F401
 
     logger.info("Database init url=%s", _safe_database_url(DATABASE_URL))
     Base.metadata.create_all(bind=engine)

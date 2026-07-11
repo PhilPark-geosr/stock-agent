@@ -10,21 +10,21 @@ logger = logging.getLogger(__name__)
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from app.agent import AnalysisAgent, GeminiAnalysisAgent
-from app.alert_conditions import DEFAULT_SYSTEM_ALERT_CONDITIONS
-from app.analysis_graph import MainAnalysisAgent
-from app.custom_rule_agent import (
+from app.agents.agent import AnalysisAgent, GeminiAnalysisAgent
+from app.agents.analysis_graph import MainAnalysisAgent
+from app.agents.custom_rule_agent import (
     CustomRuleAgent,
     LangGraphCustomRuleAgent,
 )
-from app.database import get_db
-from app.kakao_notify import AlertNotifier, KakaoNotifyError, get_default_alert_notifier
-from app.market_data import MarketDataProvider, YFinanceMarketDataProvider
-from app.models import AnalysisResult as StoredAnalysisResult
+from app.core.database import get_db
+from app.core.scheduler_config import scheduler_settings
+from app.core.trading_window import is_alert_window
+from app.domain.alert_conditions import DEFAULT_SYSTEM_ALERT_CONDITIONS
+from app.domain.models import AnalysisResult as StoredAnalysisResult
+from app.integrations.kakao_notify import AlertNotifier, KakaoNotifyError, get_default_alert_notifier
+from app.integrations.market_data import MarketDataProvider, YFinanceMarketDataProvider
 from app.repositories import AlertConditionRepository, AnalysisRepository, WatchlistRepository, normalize_symbol
-from app.scheduler_config import scheduler_settings
 from app.schemas import model_to_dict
-from app.trading_window import is_alert_window
 
 
 @dataclass

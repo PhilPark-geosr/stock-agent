@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 
-from app.settings import load_environment
-from app.trading_window import DEFAULT_MARKET_END_HOUR, DEFAULT_MARKET_START_HOUR, DEFAULT_TIMEZONE
+from app.core.settings import load_environment
+from app.core.trading_window import DEFAULT_MARKET_END_HOUR, DEFAULT_MARKET_START_HOUR, DEFAULT_TIMEZONE
 
 
 def alert_window_settings() -> dict[str, int | str]:

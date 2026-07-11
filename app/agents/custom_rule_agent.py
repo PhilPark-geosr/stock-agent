@@ -12,11 +12,11 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
 
-from app.alert_conditions import CustomAlertCondition
-from app.custom_rule_tools.news import fetch_symbol_news
-from app.custom_rule_tools.registry import get_custom_rule_tools
-from app.market_data import MarketDataProvider, YFinanceMarketDataProvider
+from app.domain.alert_conditions import CustomAlertCondition
+from app.integrations.market_data import MarketDataProvider, YFinanceMarketDataProvider
 from app.schemas import model_to_dict
+from app.tools.custom_rule.news import fetch_symbol_news
+from app.tools.custom_rule.registry import get_custom_rule_tools
 
 logger = logging.getLogger(__name__)
 

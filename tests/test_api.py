@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.repositories import AnalysisRepository
-from app.alert_conditions import RuleValidationResult
+from app.domain.alert_conditions import RuleValidationResult
 from app.schemas import AnalysisResult
 
 

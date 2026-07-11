@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.alert_conditions import CustomAlertCondition, RuleValidationResult
-from app.models import AnalysisResult, CustomAlertConditionRecord, WatchlistItem
+from app.domain.alert_conditions import CustomAlertCondition, RuleValidationResult
+from app.domain.models import AnalysisResult, CustomAlertConditionRecord, WatchlistItem
 
 
 def normalize_symbol(symbol: str) -> str:

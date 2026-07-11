@@ -7,8 +7,8 @@ from typing import Protocol, TypedDict
 
 from langgraph.graph import END, StateGraph
 
-from app.alert_conditions import AlertConditionUnion, CustomAlertCondition
-from app.custom_rule_agent import CustomRuleAgent
+from app.agents.custom_rule_agent import CustomRuleAgent
+from app.domain.alert_conditions import AlertConditionUnion, CustomAlertCondition
 from app.schemas import AnalysisResult, MarketDataSnapshot, model_to_dict
 
 logger = logging.getLogger(__name__)

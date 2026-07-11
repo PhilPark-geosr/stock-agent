@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 
 import httpx
 
-from app.settings import _ENV_FILE
+from app.core.settings import _ENV_FILE
 
 KAKAO_AUTH_URL = "https://kauth.kakao.com/oauth/authorize"
 KAKAO_TOKEN_URL = "https://kauth.kakao.com/oauth/token"
@@ -22,7 +22,7 @@ class KakaoAuthError(RuntimeError):
 
 
 def kakao_settings() -> dict[str, str | None]:
-    from app.settings import load_environment
+    from app.core.settings import load_environment
 
     load_environment()
     return {

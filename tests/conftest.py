@@ -11,12 +11,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app import models  # noqa: F401
-from app.agent import AnalysisAgentError
-from app.database import Base, get_db
+from app.agents.agent import AnalysisAgentError
+from app.agents.rule_validation import RuleValidationResult
+from app.core.database import Base, get_db
+from app.domain import models  # noqa: F401
+from app.integrations.market_data import MarketDataError
 from app.main import app
-from app.market_data import MarketDataError
-from app.rule_validation import RuleValidationResult
 from app.schemas import AnalysisResult, MarketDataSnapshot, MarketIndicators
 from app.services import build_analysis_service, get_alert_notifier, get_analysis_agent, get_market_data_provider
 
@@ -155,7 +155,7 @@ def client(
     app.dependency_overrides[get_market_data_provider] = lambda: market_data
     app.dependency_overrides[get_analysis_agent] = lambda: agent
     app.dependency_overrides[get_alert_notifier] = lambda: alert_notifier
-    from app.routes import get_rule_validation_agent
+    from app.api.routes import get_rule_validation_agent
 
     app.dependency_overrides[get_rule_validation_agent] = lambda: rule_validation_agent
     from app.services import get_analysis_service

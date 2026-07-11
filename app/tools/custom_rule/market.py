@@ -7,7 +7,7 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-from app.market_data import YFinanceMarketDataProvider
+from app.integrations.market_data import YFinanceMarketDataProvider
 from app.schemas import model_to_dict
 
 logger = logging.getLogger(__name__)
