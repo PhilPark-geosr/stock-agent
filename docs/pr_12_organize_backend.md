@@ -36,8 +36,11 @@ Closes #12
 │ - services.py: analysis use case                             │
 │ - scheduler.py: scheduled batch use case                     │
 │                                                              │
+│ app/application                                              │
+│ - analysis graph / custom rule workflow                      │
+│                                                              │
 │ depends on app.interfaces only                               │
-│ does not import concrete repositories/integrations/agents     │
+│ does not import concrete repositories/integrations            │
 └───────────────────────────────┬──────────────────────────────┘
                                 │
                                 ▼
@@ -59,9 +62,6 @@ Closes #12
 │ Infrastructure / Adapter Layer                               │
 │ app/repositories                                             │
 │ - SQLAlchemy repository implementations                      │
-│                                                              │
-│ app/application                                              │
-│ - analysis graph / custom rule workflow                      │
 │                                                              │
 │ app/integrations                                             │
 │ - yfinance / Kakao / Gemini adapters                         │

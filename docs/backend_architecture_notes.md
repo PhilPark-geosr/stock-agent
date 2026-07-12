@@ -51,8 +51,8 @@ application / repositories / integrations
                                 ▼
 ┌──────────────────────────────────────────────────────────────┐
 │ Application Layer                                            │
-│ app/services                                                 │
-│ 분석 실행, 저장 흐름, 알림 판단, 스케줄 배치 유스케이스        │
+│ app/services, app/application                                │
+│ 분석 실행, 저장 흐름, 알림 판단, 스케줄 배치, 분석 workflow    │
 └───────────────────────────────┬──────────────────────────────┘
                                 │
                                 ▼
