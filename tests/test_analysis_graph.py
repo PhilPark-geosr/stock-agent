@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.agents.analysis_graph import MainAnalysisAgent
-from app.agents.custom_rule_agent import CustomRuleContext
+from app.application.analysis_graph import MainAnalysisAgent
+from app.application.custom_rule_agent import CustomRuleContext
 from app.domain.alert_conditions import CustomAlertCondition, DEFAULT_SYSTEM_ALERT_CONDITIONS
 from app.schemas import AnalysisResult, MarketDataSnapshot
 

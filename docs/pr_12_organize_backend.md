@@ -60,11 +60,11 @@ Closes #12
 │ app/repositories                                             │
 │ - SQLAlchemy repository implementations                      │
 │                                                              │
-│ app/agents                                                   │
-│ - Gemini / LangGraph implementations                         │
+│ app/application                                              │
+│ - analysis graph / custom rule workflow                      │
 │                                                              │
 │ app/integrations                                             │
-│ - yfinance / Kakao adapters                                  │
+│ - yfinance / Kakao / Gemini adapters                         │
 │                                                              │
 │ app/tools                                                    │
 │ - LangChain tools for custom rule agents                     │
@@ -142,11 +142,14 @@ flowchart TB
       REPOSITORIES_FILE["repositories.py<br/>SQLAlchemy repository 구현체"]
     end
 
-    subgraph AGENTS["agents"]
-      AGENT["agent.py<br/>Gemini 분석 구현체"]
+    subgraph APPLICATION["application"]
       ANALYSIS_GRAPH["analysis_graph.py<br/>LangGraph 오케스트레이션"]
       CUSTOM_RULE_AGENT["custom_rule_agent.py<br/>커스텀 규칙 컨텍스트"]
-      RULE_VALIDATION["rule_validation.py<br/>규칙 검증 구현체"]
+    end
+
+    subgraph LLM["integrations/llm"]
+      AGENT["gemini_analysis_agent.py<br/>Gemini 분석 구현체"]
+      RULE_VALIDATION["gemini_rule_validation_agent.py<br/>규칙 검증 구현체"]
     end
 
     subgraph INTEGRATIONS["integrations"]
@@ -174,9 +177,11 @@ flowchart TB
   SERVICES --> INTERFACES
   SERVICES --> DOMAIN
   SERVICES --> SCHEMAS
-  AGENTS --> INTERFACES
-  AGENTS --> DOMAIN
-  AGENTS --> SCHEMAS
+  APPLICATION --> INTERFACES
+  APPLICATION --> DOMAIN
+  APPLICATION --> SCHEMAS
+  LLM --> INTERFACES
+  LLM --> SCHEMAS
   INTEGRATIONS --> INTERFACES
   REPOSITORIES --> INTERFACES
   REPOSITORIES --> DOMAIN
@@ -186,7 +191,8 @@ flowchart TB
   CONTAINER --> INTERFACES
   CONTAINER --> REPOSITORIES
   CONTAINER --> INTEGRATIONS
-  CONTAINER --> AGENTS
+  CONTAINER --> APPLICATION
+  CONTAINER --> LLM
   SCHEDULER_RUNTIME --> CONTAINER
   SCHEDULER_RUNTIME --> SERVICES
 ```
@@ -202,9 +208,9 @@ flowchart TB
 | `app.schemas` | Pydantic/API 데이터 계약 | 요청/응답/전송용 스키마와 serialization helper를 담당합니다. |
 | `app.interfaces` | Application Layer가 의존하는 추상 계약 | repository, market data provider, analysis agent, notifier protocol과 공통 error를 담당합니다. |
 | `app.services` | 애플리케이션 유스케이스 계층 | 분석 실행, 분석 결과 저장 흐름, 알림 판단, 스케줄 배치 유스케이스를 담당합니다. concrete infrastructure를 직접 import하지 않습니다. |
+| `app.application` | 애플리케이션 workflow | 분석 graph와 custom rule context 수집 흐름을 담당합니다. |
 | `app.repositories` | DB adapter 구현체 | `app.interfaces.repositories`의 SQLAlchemy 구현체를 담당합니다. |
-| `app.agents` | LLM/LangGraph 구현체 | Gemini 분석, LangGraph 오케스트레이션, 규칙 검증 구현체를 담당합니다. |
-| `app.integrations` | 외부 시스템 adapter 구현체 | yfinance, Kakao OAuth, Kakao 알림 같은 외부 연동 세부사항을 담당합니다. |
+| `app.integrations` | 외부 시스템 adapter 구현체 | yfinance, Kakao OAuth, Kakao 알림, Gemini adapter 같은 외부 연동 세부사항을 담당합니다. |
 | `app.tools` | 에이전트 도구 구현 | 커스텀 규칙 에이전트가 사용하는 allowlisted LangChain tool을 담당합니다. |
 | `app.templates` | 서버 렌더링 HTML | API 계층에서 사용하는 Jinja 템플릿을 담당합니다. |
 
@@ -212,6 +218,7 @@ flowchart TB
 
 - `app/services/services.py`에서 concrete repository, yfinance provider, Gemini agent, Kakao notifier, FastAPI dependency import를 제거했습니다.
 - `app/interfaces/`에 `analysis.py`, `market_data.py`, `notifications.py`, `repositories.py`를 추가했습니다.
+- 분석 workflow는 `app/application/`, Gemini 구현체는 `app/integrations/llm/`로 분리했습니다.
 - `app/core/container.py`에서 실제 구현체를 조립하도록 변경했습니다.
 - `app/api/deps.py`에서 FastAPI dependency를 제공하도록 변경했습니다.
 - `app/services/scheduler.py`는 `AnalysisProvider`만 받아 실행하고, DB 세션 기반 runtime은 `app/core/scheduler_runtime.py`로 이동했습니다.

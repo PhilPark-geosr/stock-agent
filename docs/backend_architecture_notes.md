@@ -16,9 +16,9 @@ app/
   schemas/         Pydantic/API 데이터 계약
   interfaces/      Application Layer가 의존하는 Protocol 계약
   services/        애플리케이션 유스케이스
+  application/     분석 workflow orchestration
   repositories/    SQLAlchemy repository 구현체
-  agents/          Gemini/LangGraph 구현체
-  integrations/    yfinance/Kakao 외부 adapter
+  integrations/    yfinance/Kakao/Gemini 외부 adapter
   tools/           LangChain tool 구현체
   templates/       Jinja HTML 템플릿
 ```
@@ -33,7 +33,7 @@ api/routes
 core/container
   -> services + concrete implementations
 
-repositories / agents / integrations
+application / repositories / integrations
   -> implement interfaces
 ```
 
@@ -65,7 +65,7 @@ repositories / agents / integrations
                                 ▼
 ┌──────────────────────────────────────────────────────────────┐
 │ Infrastructure / Adapter Layer                               │
-│ app/repositories, app/agents, app/integrations, app/tools     │
+│ app/repositories, app/integrations, app/tools                 │
 │ DB, LLM, yfinance, Kakao, LangChain tool 구현체                │
 └──────────────────────────────────────────────────────────────┘
 
@@ -88,9 +88,9 @@ repositories / agents / integrations
 | `app.schemas` | Pydantic 데이터 계약 | API 요청/응답과 agent 입출력 데이터 구조를 둔다. |
 | `app.interfaces` | Protocol 계약 | service가 의존하는 repository, provider, agent, notifier 인터페이스를 둔다. |
 | `app.services` | Application use case | concrete repository, yfinance, Kakao, Gemini, FastAPI를 직접 알지 않는다. |
+| `app.application` | Application workflow | 분석 graph와 custom rule context 수집 흐름을 둔다. |
 | `app.repositories` | DB adapter | `app.interfaces.repositories`의 SQLAlchemy 구현체를 둔다. |
-| `app.agents` | LLM/graph adapter | Gemini 분석, LangGraph orchestration, rule validation 구현체를 둔다. |
-| `app.integrations` | 외부 API adapter | yfinance와 Kakao 연동 세부사항을 둔다. |
+| `app.integrations` | 외부 API adapter | yfinance, Kakao, Gemini 같은 외부 연동 세부사항을 둔다. |
 | `app.tools` | Agent tool adapter | custom rule agent가 사용하는 LangChain tool을 둔다. |
 
 ## 의존성 역전 적용 내용
@@ -192,19 +192,11 @@ app/repositories/models.py
   SQLAlchemy ORM models
 ```
 
-### 3. Agent와 Integration 경계
+### 3. Application workflow와 LLM adapter 경계
 
-현재 `app.agents`는 Gemini adapter와 LangGraph orchestration을 함께 담고 있다. 이후 LLM provider가 늘어나면 다음 경계를 검토한다.
+Gemini concrete adapter는 `app/integrations/llm/`에 둔다. 분석 graph와 custom rule context 수집 흐름은 `app/application/`에 둔다.
 
-```text
-app/agents/
-  analysis_graph.py
-  custom_rule_agent.py
-
-app/integrations/llm/
-  gemini_analysis_agent.py
-  gemini_rule_validation_agent.py
-```
+이후 LLM provider가 늘어나면 `app/integrations/llm/` 아래 provider별 adapter를 추가한다.
 
 ### 4. 설정 계층 통합
 

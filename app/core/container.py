@@ -7,12 +7,12 @@ from typing import Callable
 
 from sqlalchemy.orm import Session
 
-from app.agents.agent import GeminiAnalysisAgent
-from app.agents.analysis_graph import MainAnalysisAgent
-from app.agents.custom_rule_agent import CustomRuleAgent, LangGraphCustomRuleAgent
+from app.application.analysis_graph import MainAnalysisAgent
+from app.application.custom_rule_agent import CustomRuleAgent, LangGraphCustomRuleAgent
 from app.core.scheduler_config import scheduler_settings
 from app.core.trading_window import is_alert_window
 from app.integrations.kakao_notify import get_default_alert_notifier
+from app.integrations.llm.gemini_analysis_agent import GeminiAnalysisAgent
 from app.integrations.yfinance_market_data_provider import YFinanceMarketDataProvider
 from app.interfaces.analysis import AnalysisAgent
 from app.interfaces.market_data import MarketDataProvider

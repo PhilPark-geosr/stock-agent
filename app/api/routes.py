@@ -4,14 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.agents.custom_rule_agent import CustomRuleAgentError
-from app.agents.rule_validation import RuleValidationAgent, RuleValidationError
 from app.api.deps import (
     get_alert_condition_repository,
     get_analysis_service,
     get_rule_validation_agent,
     get_watchlist_repository,
 )
+from app.application.custom_rule_agent import CustomRuleAgentError
 from app.integrations.kakao_auth import (
     KakaoAuthError,
     build_authorize_url,
@@ -22,6 +21,7 @@ from app.interfaces.analysis import AgentConfigurationError, AnalysisAgentError
 from app.interfaces.market_data import MarketDataError
 from app.interfaces.notifications import AlertNotifyError
 from app.interfaces.repositories import AlertConditionRepository, WatchlistRepository
+from app.interfaces.rule_validation import RuleValidationAgent, RuleValidationError
 from app.schemas import (
     AnalysisResultRead,
     CustomAlertConditionCreate,

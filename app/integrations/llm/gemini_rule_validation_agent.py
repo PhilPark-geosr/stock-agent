@@ -4,23 +4,15 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Protocol
+from typing import Any
 
 import httpx
 
 from app.domain.alert_conditions import RuleValidationResult, SUPPORTED_CUSTOM_RULE_TOOLS
 from app.domain.symbols import normalize_symbol
 from app.interfaces.analysis import AgentConfigurationError
+from app.interfaces.rule_validation import RuleValidationAgent, RuleValidationError
 from app.schemas import parse_model_json
-
-
-class RuleValidationError(RuntimeError):
-    """Raised when a custom rule cannot be validated."""
-
-
-class RuleValidationAgent(Protocol):
-    def validate(self, *, user_rule: str, target_symbol: str) -> RuleValidationResult:
-        """Return whether a natural-language rule can be executed by this system."""
 
 
 class GeminiRuleValidationAgent(RuleValidationAgent):

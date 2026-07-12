@@ -12,10 +12,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.deps import get_alert_notifier, get_analysis_agent, get_analysis_service, get_market_data_provider
-from app.agents.rule_validation import RuleValidationResult
 from app.core.container import build_analysis_service
 from app.core.database import Base, get_db
 from app.domain import models  # noqa: F401
+from app.domain.alert_conditions import RuleValidationResult
 from app.interfaces.analysis import AnalysisAgentError
 from app.interfaces.market_data import MarketDataError
 from app.main import app

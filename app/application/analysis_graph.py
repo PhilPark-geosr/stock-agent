@@ -7,7 +7,7 @@ from typing import Protocol, TypedDict
 
 from langgraph.graph import END, StateGraph
 
-from app.agents.custom_rule_agent import CustomRuleAgent
+from app.application.custom_rule_agent import CustomRuleAgent
 from app.domain.alert_conditions import AlertConditionUnion, CustomAlertCondition
 from app.interfaces.analysis import AnalysisAgent
 from app.schemas import AnalysisResult, MarketDataSnapshot, model_to_dict

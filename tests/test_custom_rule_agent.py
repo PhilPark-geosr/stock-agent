@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 
-from app.agents.custom_rule_agent import (
+from app.application.custom_rule_agent import (
     CustomRuleAgentError,
     LangGraphCustomRuleAgent,
     build_custom_rule_llm,

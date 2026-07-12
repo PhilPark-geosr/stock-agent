@@ -8,6 +8,7 @@ from app.interfaces.repositories import (
     AnalysisRepository,
     WatchlistRepository,
 )
+from app.interfaces.rule_validation import RuleValidationAgent, RuleValidationError
 
 __all__ = [
     "AgentConfigurationError",
@@ -19,5 +20,7 @@ __all__ = [
     "AnalysisRepository",
     "MarketDataError",
     "MarketDataProvider",
+    "RuleValidationAgent",
+    "RuleValidationError",
     "WatchlistRepository",
 ]

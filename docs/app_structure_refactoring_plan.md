@@ -64,11 +64,14 @@ flowchart TB
       SCHEDULER["scheduler.py<br/>scheduled batch runner"]
     end
 
-    subgraph AGENTS["agents"]
-      AGENT["agent.py<br/>Gemini analysis agent"]
+    subgraph APPLICATION["application"]
       ANALYSIS_GRAPH["analysis_graph.py<br/>LangGraph orchestration"]
       CUSTOM_RULE_AGENT["custom_rule_agent.py<br/>custom rule context"]
-      RULE_VALIDATION["rule_validation.py<br/>rule validation agent"]
+    end
+
+    subgraph LLM["integrations/llm"]
+      AGENT["gemini_analysis_agent.py<br/>Gemini analysis adapter"]
+      RULE_VALIDATION["gemini_rule_validation_agent.py<br/>Gemini rule-validation adapter"]
     end
 
     subgraph INTEGRATIONS["integrations"]
@@ -94,19 +97,21 @@ flowchart TB
   MAIN --> CORE
   API --> API_DEPS
   API --> SERVICES
-  API --> AGENTS
+  API --> APPLICATION
   API --> REPOSITORIES
   API --> INTERFACES
   SERVICES --> REPOSITORIES
-  SERVICES --> AGENTS
+  SERVICES --> APPLICATION
   SERVICES --> INTERFACES
   SERVICES --> INTEGRATIONS
   SERVICES --> CORE
   REPOSITORIES --> DOMAIN
-  AGENTS --> DOMAIN
-  AGENTS --> SCHEMAS
-  AGENTS --> INTERFACES
-  AGENTS --> TOOLS
+  APPLICATION --> DOMAIN
+  APPLICATION --> SCHEMAS
+  APPLICATION --> INTERFACES
+  APPLICATION --> TOOLS
+  LLM --> INTERFACES
+  LLM --> SCHEMAS
   INTEGRATIONS --> INTERFACES
   INTEGRATIONS --> CORE
   TOOLS --> INTEGRATIONS
@@ -114,7 +119,8 @@ flowchart TB
   CONTAINER --> INTERFACES
   CONTAINER --> INTEGRATIONS
   CONTAINER --> REPOSITORIES
-  CONTAINER --> AGENTS
+  CONTAINER --> APPLICATION
+  CONTAINER --> LLM
   SCHEDULER_RUNTIME --> CONTAINER
   SCHEDULER_RUNTIME --> SERVICES
 ```
@@ -137,10 +143,10 @@ flowchart TB
 | `app/repositories.py` | `app/repositories/repositories.py` |
 | `app/services.py` | `app/services/services.py` |
 | `app/scheduler.py` | `app/services/scheduler.py` |
-| `app/agent.py` | `app/agents/agent.py` |
-| `app/analysis_graph.py` | `app/agents/analysis_graph.py` |
-| `app/custom_rule_agent.py` | `app/agents/custom_rule_agent.py` |
-| `app/rule_validation.py` | `app/agents/rule_validation.py` |
+| `app/agent.py` | `app/integrations/llm/gemini_analysis_agent.py` |
+| `app/analysis_graph.py` | `app/application/analysis_graph.py` |
+| `app/custom_rule_agent.py` | `app/application/custom_rule_agent.py` |
+| `app/rule_validation.py` | `app/interfaces/rule_validation.py`, `app/integrations/llm/gemini_rule_validation_agent.py` |
 | `app/market_data.py` | `app/interfaces/market_data.py`, `app/integrations/yfinance_market_data_provider.py` |
 | service dependency assembly | `app/core/container.py`, `app/api/deps.py` |
 | scheduler runtime wiring | `app/core/scheduler_runtime.py` |

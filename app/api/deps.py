@@ -5,7 +5,6 @@ from __future__ import annotations
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from app.agents.rule_validation import GeminiRuleValidationAgent, RuleValidationAgent
 from app.core.container import (
     build_analysis_service,
     get_alert_notifier,
@@ -13,6 +12,7 @@ from app.core.container import (
     get_market_data_provider,
 )
 from app.core.database import get_db
+from app.integrations.llm.gemini_rule_validation_agent import GeminiRuleValidationAgent
 from app.interfaces.analysis import AnalysisAgent
 from app.interfaces.market_data import MarketDataProvider
 from app.interfaces.notifications import AlertNotifier
@@ -20,6 +20,7 @@ from app.interfaces.repositories import (
     AlertConditionRepository as AlertConditionRepositoryInterface,
     WatchlistRepository as WatchlistRepositoryInterface,
 )
+from app.interfaces.rule_validation import RuleValidationAgent
 from app.repositories import AlertConditionRepository, WatchlistRepository
 from app.services import AnalysisProvider
 
