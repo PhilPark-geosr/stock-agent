@@ -45,7 +45,7 @@ class CustomRuleAgentState(TypedDict, total=False):
     custom_context: CustomRuleContext
 
 
-class LangGraphCustomRuleAgent:
+class LangGraphCustomRuleAgent(CustomRuleAgent):
     """Use LLM tool-calling to gather custom-rule context at analysis time."""
 
     def __init__(
@@ -226,7 +226,7 @@ def build_custom_rule_llm() -> Any:
     )
 
 
-class DefaultCustomRuleAgent:
+class DefaultCustomRuleAgent(CustomRuleAgent):
     def __init__(self, *, market_data_provider: MarketDataProvider | None = None) -> None:
         self.market_data_provider = market_data_provider or YFinanceMarketDataProvider()
 

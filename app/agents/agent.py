@@ -24,7 +24,7 @@ from app.schemas import (
 DEFAULT_MODEL = "gemini-2.5-flash"
 
 
-class GeminiAnalysisAgent:
+class GeminiAnalysisAgent(AnalysisAgent):
     """Gemini REST API adapter that returns the shared structured result schema."""
 
     def __init__(self, *, client: httpx.Client | None = None, model: str | None = None) -> None:

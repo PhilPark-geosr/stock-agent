@@ -19,7 +19,7 @@ class KakaoNotifyError(AlertNotifyError):
     """Raised when Kakao memo send fails."""
 
 
-class KakaoAlertNotifier:
+class KakaoAlertNotifier(AlertNotifier):
     def __init__(self, *, client: httpx.Client | None = None) -> None:
         self._client = client
 
@@ -27,7 +27,7 @@ class KakaoAlertNotifier:
         send_alert_reason(alert_reason, client=self._client)
 
 
-class NoOpAlertNotifier:
+class NoOpAlertNotifier(AlertNotifier):
     def send_alert(self, alert_reason: str) -> None:
         return
 

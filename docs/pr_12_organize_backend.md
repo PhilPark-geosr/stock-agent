@@ -216,6 +216,7 @@ flowchart TB
 - `app/api/deps.py`에서 FastAPI dependency를 제공하도록 변경했습니다.
 - `app/services/scheduler.py`는 `AnalysisProvider`만 받아 실행하고, DB 세션 기반 runtime은 `app/core/scheduler_runtime.py`로 이동했습니다.
 - `MarketDataProvider`는 `app/interfaces/market_data.py`, `YFinanceMarketDataProvider`는 `app/integrations/yfinance_market_data_provider.py`로 분리했습니다.
+- concrete 구현체 클래스가 자신이 따르는 Protocol을 명시적으로 상속하도록 정리했습니다.
 - `normalize_symbol`은 repository 구현체가 아니라 `app/domain/symbols.py`로 이동했습니다.
 - 패키지 구조와 후속 계획을 `docs/app_structure_refactoring_plan.md`에 문서화했습니다.
 

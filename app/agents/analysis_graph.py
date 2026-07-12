@@ -9,6 +9,7 @@ from langgraph.graph import END, StateGraph
 
 from app.agents.custom_rule_agent import CustomRuleAgent
 from app.domain.alert_conditions import AlertConditionUnion, CustomAlertCondition
+from app.interfaces.analysis import AnalysisAgent
 from app.schemas import AnalysisResult, MarketDataSnapshot, model_to_dict
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ class AnalysisGraphState(TypedDict, total=False):
     analysis_result: AnalysisResult
 
 
-class MainAnalysisAgent:
+class MainAnalysisAgent(AnalysisAgent):
     """Run validated custom-rule context gathering before final LLM analysis."""
 
     def __init__(self, *, main_model: MainAnalysisModel, custom_rule_agent: CustomRuleAgent) -> None:

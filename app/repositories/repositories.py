@@ -8,9 +8,14 @@ from sqlalchemy.orm import Session
 from app.domain.alert_conditions import CustomAlertCondition, RuleValidationResult
 from app.domain.models import AnalysisResult, CustomAlertConditionRecord, WatchlistItem
 from app.domain.symbols import normalize_symbol
+from app.interfaces.repositories import (
+    AlertConditionRepository as AlertConditionRepositoryInterface,
+    AnalysisRepository as AnalysisRepositoryInterface,
+    WatchlistRepository as WatchlistRepositoryInterface,
+)
 
 
-class WatchlistRepository:
+class WatchlistRepository(WatchlistRepositoryInterface):
     def __init__(self, db: Session) -> None:
         self.db = db
 
@@ -50,7 +55,7 @@ class WatchlistRepository:
         return True
 
 
-class AlertConditionRepository:
+class AlertConditionRepository(AlertConditionRepositoryInterface):
     def __init__(self, db: Session) -> None:
         self.db = db
 
@@ -129,7 +134,7 @@ class AlertConditionRepository:
         )
 
 
-class AnalysisRepository:
+class AnalysisRepository(AnalysisRepositoryInterface):
     def __init__(self, db: Session) -> None:
         self.db = db
 

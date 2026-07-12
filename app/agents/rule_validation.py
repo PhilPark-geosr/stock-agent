@@ -23,7 +23,7 @@ class RuleValidationAgent(Protocol):
         """Return whether a natural-language rule can be executed by this system."""
 
 
-class GeminiRuleValidationAgent:
+class GeminiRuleValidationAgent(RuleValidationAgent):
     def __init__(self, *, client: httpx.Client | None = None, model: str | None = None) -> None:
         self.model = model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         self.api_key = os.getenv("GEMINI_API_KEY")
