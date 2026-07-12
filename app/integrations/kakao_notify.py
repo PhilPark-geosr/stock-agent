@@ -4,24 +4,19 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Protocol
 
 import httpx
 
 from app.integrations.kakao_auth import kakao_settings, persist_tokens_to_env, refresh_access_token
+from app.interfaces.notifications import AlertNotifier, AlertNotifyError
 
 logger = logging.getLogger(__name__)
 
 KAKAO_MEMO_URL = "https://kapi.kakao.com/v2/api/talk/memo/default/send"
 
 
-class KakaoNotifyError(RuntimeError):
+class KakaoNotifyError(AlertNotifyError):
     """Raised when Kakao memo send fails."""
-
-
-class AlertNotifier(Protocol):
-    def send_alert(self, alert_reason: str) -> None:
-        ...
 
 
 class KakaoAlertNotifier:

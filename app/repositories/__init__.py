@@ -4,8 +4,8 @@ from app.repositories.repositories import (
     AlertConditionRepository,
     AnalysisRepository,
     WatchlistRepository,
-    normalize_symbol,
 )
+from app.domain.symbols import normalize_symbol
 
 __all__ = [
     "AlertConditionRepository",

@@ -3,21 +3,25 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
 
-from app.agents.agent import AgentConfigurationError, AnalysisAgentError
 from app.agents.custom_rule_agent import CustomRuleAgentError
-from app.agents.rule_validation import GeminiRuleValidationAgent, RuleValidationAgent, RuleValidationError
-from app.core.database import get_db
+from app.agents.rule_validation import RuleValidationAgent, RuleValidationError
+from app.api.deps import (
+    get_alert_condition_repository,
+    get_analysis_service,
+    get_rule_validation_agent,
+    get_watchlist_repository,
+)
 from app.integrations.kakao_auth import (
     KakaoAuthError,
     build_authorize_url,
     exchange_code_for_token,
     persist_tokens_to_env,
 )
-from app.integrations.kakao_notify import KakaoNotifyError
+from app.interfaces.analysis import AgentConfigurationError, AnalysisAgentError
 from app.interfaces.market_data import MarketDataError
-from app.repositories import AlertConditionRepository, WatchlistRepository
+from app.interfaces.notifications import AlertNotifyError
+from app.interfaces.repositories import AlertConditionRepository, WatchlistRepository
 from app.schemas import (
     AnalysisResultRead,
     CustomAlertConditionCreate,
@@ -26,7 +30,7 @@ from app.schemas import (
     WatchlistItemRead,
 )
 from app.services.scheduler import run_scheduled_batch
-from app.services import AnalysisProvider, ScheduledBatchResult, get_analysis_service
+from app.services import AnalysisProvider, ScheduledBatchResult
 
 
 router = APIRouter()
@@ -45,10 +49,6 @@ def index(request: Request):
 @router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
-
-
-def get_rule_validation_agent() -> RuleValidationAgent:
-    return GeminiRuleValidationAgent()
 
 
 @router.get("/auth/kakao/login")
@@ -111,18 +111,24 @@ def kakao_callback(
 
 
 @router.post("/watchlist", response_model=WatchlistItemRead, status_code=status.HTTP_201_CREATED)
-def add_watchlist_item(payload: WatchlistCreate, db: Session = Depends(get_db)):
-    return WatchlistRepository(db).add(payload.symbol)
+def add_watchlist_item(
+    payload: WatchlistCreate,
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
+):
+    return watchlist_repository.add(payload.symbol)
 
 
 @router.get("/watchlist", response_model=list[WatchlistItemRead])
-def list_watchlist_items(db: Session = Depends(get_db)):
-    return WatchlistRepository(db).list()
+def list_watchlist_items(watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository)):
+    return watchlist_repository.list()
 
 
 @router.delete("/watchlist/{symbol}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_watchlist_item(symbol: str, db: Session = Depends(get_db)):
-    deleted = WatchlistRepository(db).delete(symbol)
+def delete_watchlist_item(
+    symbol: str,
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
+):
+    deleted = watchlist_repository.delete(symbol)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="watchlist item not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -135,7 +141,7 @@ def delete_watchlist_item(symbol: str, db: Session = Depends(get_db)):
 )
 def create_alert_condition(
     payload: CustomAlertConditionCreate,
-    db: Session = Depends(get_db),
+    alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
     validation_agent: RuleValidationAgent = Depends(get_rule_validation_agent),
 ):
     try:
@@ -155,7 +161,7 @@ def create_alert_condition(
             },
         )
 
-    return AlertConditionRepository(db).save_validated(
+    return alert_condition_repository.save_validated(
         symbol=payload.symbol,
         user_rule=payload.user_rule,
         validation=validation,
@@ -163,13 +169,18 @@ def create_alert_condition(
 
 
 @router.get("/alert-conditions", response_model=list[CustomAlertConditionRead])
-def list_alert_conditions(db: Session = Depends(get_db)):
-    return AlertConditionRepository(db).list()
+def list_alert_conditions(
+    alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
+):
+    return alert_condition_repository.list()
 
 
 @router.delete("/alert-conditions/{condition_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_alert_condition(condition_id: int, db: Session = Depends(get_db)):
-    if not AlertConditionRepository(db).delete(condition_id):
+def delete_alert_condition(
+    condition_id: int,
+    alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
+):
+    if not alert_condition_repository.delete(condition_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alert condition not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -177,11 +188,11 @@ def delete_alert_condition(condition_id: int, db: Session = Depends(get_db)):
 @router.post("/scheduler/run", response_model=ScheduledBatchResult)
 def run_scheduler(
     force: bool = Query(default=False, description="Skip market-hours check"),
-    db: Session = Depends(get_db),
+    analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
     try:
-        return run_scheduled_batch(db, ignore_market_hours=force)
-    except KakaoNotifyError as exc:
+        return run_scheduled_batch(analysis_service, ignore_market_hours=force)
+    except AlertNotifyError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
@@ -198,6 +209,6 @@ def get_latest_analysis(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     except (AnalysisAgentError, AgentConfigurationError, CustomRuleAgentError) as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    except KakaoNotifyError as exc:
+    except AlertNotifyError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return result

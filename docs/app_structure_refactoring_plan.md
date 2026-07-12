@@ -26,6 +26,7 @@ flowchart TB
 
     subgraph API["api"]
       ROUTES["routes.py<br/>HTTP routes"]
+      API_DEPS["deps.py<br/>FastAPI dependencies"]
     end
 
     subgraph CORE["core"]
@@ -34,6 +35,8 @@ flowchart TB
       SCHEDULER_CONFIG["scheduler_config.py"]
       ALERT_CONFIG["alert_config.py"]
       TRADING_WINDOW["trading_window.py"]
+      CONTAINER["container.py<br/>composition root"]
+      SCHEDULER_RUNTIME["scheduler_runtime.py<br/>background runtime"]
     end
 
     subgraph DOMAIN["domain"]
@@ -47,6 +50,9 @@ flowchart TB
 
     subgraph INTERFACES["interfaces"]
       MARKET_DATA_INTERFACE["market_data.py<br/>MarketDataProvider interface"]
+      ANALYSIS_INTERFACE["analysis.py<br/>AnalysisAgent interface"]
+      NOTIFICATION_INTERFACE["notifications.py<br/>AlertNotifier interface"]
+      REPOSITORY_INTERFACE["repositories.py<br/>repository interfaces"]
     end
 
     subgraph REPOSITORIES["repositories"]
@@ -86,6 +92,7 @@ flowchart TB
 
   MAIN --> API
   MAIN --> CORE
+  API --> API_DEPS
   API --> SERVICES
   API --> AGENTS
   API --> REPOSITORIES
@@ -103,6 +110,13 @@ flowchart TB
   INTEGRATIONS --> INTERFACES
   INTEGRATIONS --> CORE
   TOOLS --> INTEGRATIONS
+  CONTAINER --> SERVICES
+  CONTAINER --> INTERFACES
+  CONTAINER --> INTEGRATIONS
+  CONTAINER --> REPOSITORIES
+  CONTAINER --> AGENTS
+  SCHEDULER_RUNTIME --> CONTAINER
+  SCHEDULER_RUNTIME --> SERVICES
 ```
 
 ## 1차 Implementation Plan
@@ -128,6 +142,8 @@ flowchart TB
 | `app/custom_rule_agent.py` | `app/agents/custom_rule_agent.py` |
 | `app/rule_validation.py` | `app/agents/rule_validation.py` |
 | `app/market_data.py` | `app/interfaces/market_data.py`, `app/integrations/yfinance_market_data_provider.py` |
+| service dependency assembly | `app/core/container.py`, `app/api/deps.py` |
+| scheduler runtime wiring | `app/core/scheduler_runtime.py` |
 | `app/kakao_auth.py` | `app/integrations/kakao_auth.py` |
 | `app/kakao_notify.py` | `app/integrations/kakao_notify.py` |
 | `app/custom_rule_tools/*` | `app/tools/custom_rule/*` |

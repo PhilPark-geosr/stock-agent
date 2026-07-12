@@ -7,24 +7,13 @@ from typing import Callable, Protocol
 
 logger = logging.getLogger(__name__)
 
-from fastapi import Depends
-from sqlalchemy.orm import Session
-
-from app.agents.agent import AnalysisAgent, GeminiAnalysisAgent
-from app.agents.analysis_graph import MainAnalysisAgent
-from app.agents.custom_rule_agent import (
-    CustomRuleAgent,
-    LangGraphCustomRuleAgent,
-)
-from app.core.database import get_db
-from app.core.scheduler_config import scheduler_settings
-from app.core.trading_window import is_alert_window
 from app.domain.alert_conditions import DEFAULT_SYSTEM_ALERT_CONDITIONS
 from app.domain.models import AnalysisResult as StoredAnalysisResult
-from app.integrations.kakao_notify import AlertNotifier, KakaoNotifyError, get_default_alert_notifier
-from app.integrations.yfinance_market_data_provider import YFinanceMarketDataProvider
+from app.domain.symbols import normalize_symbol
+from app.interfaces.analysis import AnalysisAgent
 from app.interfaces.market_data import MarketDataProvider
-from app.repositories import AlertConditionRepository, AnalysisRepository, WatchlistRepository, normalize_symbol
+from app.interfaces.notifications import AlertNotifier, AlertNotifyError
+from app.interfaces.repositories import AlertConditionRepository, AnalysisRepository, WatchlistRepository
 from app.schemas import model_to_dict
 
 
@@ -40,6 +29,9 @@ class AnalysisProvider(Protocol):
     def get_latest_analysis(self, symbol: str) -> StoredAnalysisResult:
         """Return the latest stored analysis, creating one when none exists."""
 
+    def run_scheduled_batch(self, *, now: datetime | None = None) -> ScheduledBatchResult:
+        """Analyze all scheduled symbols."""
+
 
 class AnalysisService:
     def __init__(
@@ -50,7 +42,8 @@ class AnalysisService:
         watchlist_repository: WatchlistRepository,
         market_data_provider: MarketDataProvider,
         agent: AnalysisAgent,
-        alert_notifier: AlertNotifier | None = None,
+        alert_notifier: AlertNotifier,
+        alert_window_checker: Callable[[datetime], bool],
         now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.analysis_repository = analysis_repository
@@ -58,7 +51,8 @@ class AnalysisService:
         self.watchlist_repository = watchlist_repository
         self.market_data_provider = market_data_provider
         self.agent = agent
-        self.alert_notifier = alert_notifier or get_default_alert_notifier()
+        self.alert_notifier = alert_notifier
+        self.alert_window_checker = alert_window_checker
         self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
 
     def get_latest_analysis(self, symbol: str) -> StoredAnalysisResult:
@@ -156,14 +150,8 @@ class AnalysisService:
         if not stored.should_alert or not stored.alert_reason:
             return False
 
-        settings = scheduler_settings()
         current = now or self.now_provider()
-        if not is_alert_window(
-            current,
-            start_hour=int(settings["market_start_hour"]),
-            end_hour=int(settings["market_end_hour"]),
-            tz_name=str(settings["timezone"]),
-        ):
+        if not self.alert_window_checker(current):
             return False
 
         if self.analysis_repository.has_sent_alert_for_conditions(
@@ -184,65 +172,9 @@ class AnalysisService:
             return
         try:
             self.alert_notifier.send_alert(stored.alert_reason)
-        except KakaoNotifyError:
+        except AlertNotifyError:
             raise
         except Exception as exc:
-            logger.exception("Kakao alert failed for %s", stored.symbol)
-            raise KakaoNotifyError(str(exc)) from exc
+            logger.exception("Alert notification failed for %s", stored.symbol)
+            raise AlertNotifyError(str(exc)) from exc
         self.analysis_repository.mark_alert_sent(stored)
-
-
-def build_analysis_service(
-    db: Session,
-    *,
-    market_data_provider: MarketDataProvider | None = None,
-    agent: AnalysisAgent | None = None,
-    alert_notifier: AlertNotifier | None = None,
-    now_provider: Callable[[], datetime] | None = None,
-) -> AnalysisService:
-    return AnalysisService(
-        analysis_repository=AnalysisRepository(db),
-        alert_condition_repository=AlertConditionRepository(db),
-        watchlist_repository=WatchlistRepository(db),
-        market_data_provider=market_data_provider or YFinanceMarketDataProvider(),
-        agent=agent
-        or MainAnalysisAgent(
-            main_model=GeminiAnalysisAgent(),
-            custom_rule_agent=get_default_custom_rule_agent(),
-        ),
-        alert_notifier=alert_notifier or get_default_alert_notifier(),
-        now_provider=now_provider,
-    )
-
-
-def get_market_data_provider() -> MarketDataProvider:
-    return YFinanceMarketDataProvider()
-
-
-def get_default_custom_rule_agent() -> CustomRuleAgent:
-    return LangGraphCustomRuleAgent()
-
-
-def get_analysis_agent() -> AnalysisAgent:
-    return MainAnalysisAgent(
-        main_model=GeminiAnalysisAgent(),
-        custom_rule_agent=get_default_custom_rule_agent(),
-    )
-
-
-def get_alert_notifier() -> AlertNotifier:
-    return get_default_alert_notifier()
-
-
-def get_analysis_service(
-    db: Session = Depends(get_db),
-    market_data_provider: MarketDataProvider = Depends(get_market_data_provider),
-    agent: AnalysisAgent = Depends(get_analysis_agent),
-    alert_notifier: AlertNotifier = Depends(get_alert_notifier),
-) -> AnalysisProvider:
-    return build_analysis_service(
-        db,
-        market_data_provider=market_data_provider,
-        agent=agent,
-        alert_notifier=alert_notifier,
-    )

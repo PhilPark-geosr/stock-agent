@@ -8,9 +8,9 @@ from fastapi import FastAPI
 from app.api.routes import router
 from app.core.database import SessionLocal, init_db
 from app.core.scheduler_config import scheduler_settings
+from app.core.scheduler_runtime import start_scheduler
 from app.core.settings import load_environment
 from app.integrations.kakao_auth import kakao_settings
-from app.services.scheduler import start_scheduler
 
 logging.basicConfig(level=logging.INFO)
 

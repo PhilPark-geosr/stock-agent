@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any, Iterable, Protocol
+from typing import Any, Iterable
 
 import httpx
 from pydantic import ValidationError
 
 from app.domain.alert_conditions import AlertConditionUnion, DEFAULT_SYSTEM_ALERT_CONDITIONS
+from app.interfaces.analysis import AgentConfigurationError, AnalysisAgent, AnalysisAgentError
 
 from app.schemas import (
     AnalysisResult,
@@ -21,26 +22,6 @@ from app.schemas import (
 
 
 DEFAULT_MODEL = "gemini-2.5-flash"
-
-
-class AgentConfigurationError(RuntimeError):
-    """Raised when the Gemini adapter is not configured."""
-
-
-class AnalysisAgentError(RuntimeError):
-    """Raised when analysis generation fails."""
-
-
-class AnalysisAgent(Protocol):
-    """Interface for structured stock analysis, intentionally easy to fake."""
-
-    def analyze(
-        self,
-        market_data: MarketDataSnapshot,
-        alert_conditions: Iterable[AlertConditionUnion] | None = None,
-        custom_contexts: Iterable[dict[str, Any]] | None = None,
-    ) -> AnalysisResult:
-        ...
 
 
 class GeminiAnalysisAgent:

@@ -7,10 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.alert_conditions import CustomAlertCondition, RuleValidationResult
 from app.domain.models import AnalysisResult, CustomAlertConditionRecord, WatchlistItem
-
-
-def normalize_symbol(symbol: str) -> str:
-    return symbol.strip().upper()
+from app.domain.symbols import normalize_symbol
 
 
 class WatchlistRepository:
