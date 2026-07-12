@@ -16,6 +16,83 @@ Closes #12
 - `MarketDataProvider`와 `YFinanceMarketDataProvider`를 인터페이스/구현체로 분리했습니다.
 - `settings.py` 이동 후에도 프로젝트 루트의 `.env`를 읽도록 수정하고 회귀 테스트를 추가했습니다.
 
+## 이번 PR에서 정리한 아키텍처
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ Presentation Layer                                           │
+│ app/api                                                      │
+│ - routes.py: HTTP endpoint                                   │
+│ - deps.py: FastAPI dependency wiring                         │
+│                                                              │
+│ app/templates                                                │
+│ - Jinja HTML templates                                       │
+└───────────────────────────────┬──────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Application Layer                                            │
+│ app/services                                                 │
+│ - services.py: analysis use case                             │
+│ - scheduler.py: scheduled batch use case                     │
+│                                                              │
+│ depends on app.interfaces only                               │
+│ does not import concrete repositories/integrations/agents     │
+└───────────────────────────────┬──────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Domain / Interface Layer                                     │
+│ app/domain                                                   │
+│ - core domain concepts: models, alert conditions, symbols    │
+│                                                              │
+│ app/schemas                                                  │
+│ - Pydantic data contracts                                    │
+│                                                              │
+│ app/interfaces                                               │
+│ - AnalysisAgent, MarketDataProvider, AlertNotifier           │
+│ - Repository Protocols                                       │
+└───────────────────────────────┬──────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Infrastructure / Adapter Layer                               │
+│ app/repositories                                             │
+│ - SQLAlchemy repository implementations                      │
+│                                                              │
+│ app/agents                                                   │
+│ - Gemini / LangGraph implementations                         │
+│                                                              │
+│ app/integrations                                             │
+│ - yfinance / Kakao adapters                                  │
+│                                                              │
+│ app/tools                                                    │
+│ - LangChain tools for custom rule agents                     │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│ Composition / Runtime                                        │
+│ app/core                                                     │
+│ - container.py: concrete implementation assembly             │
+│ - scheduler_runtime.py: background scheduler runtime wiring  │
+│ - database.py, settings.py, scheduler_config.py              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+핵심 의존 방향은 다음과 같습니다.
+
+```text
+api/routes
+  → services
+    → interfaces
+
+core/container
+  → services + concrete implementations
+
+repositories / agents / integrations
+  → implement interfaces
+```
+
 ## 패키지 다이어그램
 
 ```mermaid
