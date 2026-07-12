@@ -16,7 +16,7 @@ from app.integrations.kakao_auth import (
     persist_tokens_to_env,
 )
 from app.integrations.kakao_notify import KakaoNotifyError
-from app.integrations.market_data import MarketDataError
+from app.interfaces.market_data import MarketDataError
 from app.repositories import AlertConditionRepository, WatchlistRepository
 from app.schemas import (
     AnalysisResultRead,

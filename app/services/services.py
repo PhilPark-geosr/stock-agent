@@ -22,7 +22,8 @@ from app.core.trading_window import is_alert_window
 from app.domain.alert_conditions import DEFAULT_SYSTEM_ALERT_CONDITIONS
 from app.domain.models import AnalysisResult as StoredAnalysisResult
 from app.integrations.kakao_notify import AlertNotifier, KakaoNotifyError, get_default_alert_notifier
-from app.integrations.market_data import MarketDataProvider, YFinanceMarketDataProvider
+from app.integrations.yfinance_market_data_provider import YFinanceMarketDataProvider
+from app.interfaces.market_data import MarketDataProvider
 from app.repositories import AlertConditionRepository, AnalysisRepository, WatchlistRepository, normalize_symbol
 from app.schemas import model_to_dict
 

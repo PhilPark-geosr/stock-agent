@@ -15,7 +15,7 @@ from app.agents.agent import AnalysisAgentError
 from app.agents.rule_validation import RuleValidationResult
 from app.core.database import Base, get_db
 from app.domain import models  # noqa: F401
-from app.integrations.market_data import MarketDataError
+from app.interfaces.market_data import MarketDataError
 from app.main import app
 from app.schemas import AnalysisResult, MarketDataSnapshot, MarketIndicators
 from app.services import build_analysis_service, get_alert_notifier, get_analysis_agent, get_market_data_provider

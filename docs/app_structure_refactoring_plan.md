@@ -45,6 +45,10 @@ flowchart TB
       SCHEMAS_FILE["schemas.py<br/>Pydantic schemas"]
     end
 
+    subgraph INTERFACES["interfaces"]
+      MARKET_DATA_INTERFACE["market_data.py<br/>MarketDataProvider interface"]
+    end
+
     subgraph REPOSITORIES["repositories"]
       REPOSITORIES_FILE["repositories.py<br/>DB access layer"]
     end
@@ -62,7 +66,7 @@ flowchart TB
     end
 
     subgraph INTEGRATIONS["integrations"]
-      MARKET_DATA["market_data.py<br/>yfinance adapter"]
+      MARKET_DATA["yfinance_market_data_provider.py<br/>yfinance adapter"]
       KAKAO_AUTH["kakao_auth.py<br/>Kakao OAuth"]
       KAKAO_NOTIFY["kakao_notify.py<br/>Kakao notifier"]
     end
@@ -85,14 +89,18 @@ flowchart TB
   API --> SERVICES
   API --> AGENTS
   API --> REPOSITORIES
+  API --> INTERFACES
   SERVICES --> REPOSITORIES
   SERVICES --> AGENTS
+  SERVICES --> INTERFACES
   SERVICES --> INTEGRATIONS
   SERVICES --> CORE
   REPOSITORIES --> DOMAIN
   AGENTS --> DOMAIN
   AGENTS --> SCHEMAS
+  AGENTS --> INTERFACES
   AGENTS --> TOOLS
+  INTEGRATIONS --> INTERFACES
   INTEGRATIONS --> CORE
   TOOLS --> INTEGRATIONS
 ```
@@ -119,7 +127,7 @@ flowchart TB
 | `app/analysis_graph.py` | `app/agents/analysis_graph.py` |
 | `app/custom_rule_agent.py` | `app/agents/custom_rule_agent.py` |
 | `app/rule_validation.py` | `app/agents/rule_validation.py` |
-| `app/market_data.py` | `app/integrations/market_data.py` |
+| `app/market_data.py` | `app/interfaces/market_data.py`, `app/integrations/yfinance_market_data_provider.py` |
 | `app/kakao_auth.py` | `app/integrations/kakao_auth.py` |
 | `app/kakao_notify.py` | `app/integrations/kakao_notify.py` |
 | `app/custom_rule_tools/*` | `app/tools/custom_rule/*` |

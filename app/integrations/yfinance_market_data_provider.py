@@ -1,26 +1,16 @@
-"""Market data providers for analysis system v1."""
+"""yfinance market-data provider for analysis system v1."""
 
 from __future__ import annotations
 
 import math
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any
 
+from app.interfaces.market_data import MarketDataError, MarketDataProvider
 from app.schemas import MarketDataSnapshot, MarketIndicators, OHLCVRecord
 
 
-class MarketDataError(RuntimeError):
-    """Raised when market data cannot be loaded or normalized."""
-
-
-class MarketDataProvider(Protocol):
-    """Interface for fetching market data, intentionally easy to fake in tests."""
-
-    def fetch(self, symbol: str) -> MarketDataSnapshot:
-        ...
-
-
-class YFinanceMarketDataProvider:
+class YFinanceMarketDataProvider(MarketDataProvider):
     """Fetch recent OHLCV candles and indicators from yfinance."""
 
     def __init__(
