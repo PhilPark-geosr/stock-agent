@@ -11,14 +11,15 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app import models  # noqa: F401
-from app.agent import AnalysisAgentError
-from app.database import Base, get_db
+from app.api.deps import get_alert_notifier, get_analysis_agent, get_analysis_service, get_market_data_provider
+from app.core.container import build_analysis_service
+from app.core.database import Base, get_db
+from app.domain import models  # noqa: F401
+from app.domain.alert_conditions import RuleValidationResult
+from app.interfaces.analysis import AnalysisAgentError
+from app.interfaces.market_data import MarketDataError
 from app.main import app
-from app.market_data import MarketDataError
-from app.rule_validation import RuleValidationResult
 from app.schemas import AnalysisResult, MarketDataSnapshot, MarketIndicators
-from app.services import build_analysis_service, get_alert_notifier, get_analysis_agent, get_market_data_provider
 
 # 12:00 KST — inside default 08-16 alert window
 ALERT_WINDOW_UTC = datetime(2026, 6, 1, 3, 0, tzinfo=timezone.utc)
@@ -148,6 +149,7 @@ def client(
             market_data_provider=market_data,
             agent=agent,
             alert_notifier=alert_notifier,
+            alert_window_checker=lambda now: True,
             now_provider=lambda: ALERT_WINDOW_UTC,
         )
 
@@ -155,11 +157,9 @@ def client(
     app.dependency_overrides[get_market_data_provider] = lambda: market_data
     app.dependency_overrides[get_analysis_agent] = lambda: agent
     app.dependency_overrides[get_alert_notifier] = lambda: alert_notifier
-    from app.routes import get_rule_validation_agent
+    from app.api.routes import get_rule_validation_agent
 
     app.dependency_overrides[get_rule_validation_agent] = lambda: rule_validation_agent
-    from app.services import get_analysis_service
-
     app.dependency_overrides[get_analysis_service] = override_analysis_service
     test_client = TestClient(app)
     try:

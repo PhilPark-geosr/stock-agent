@@ -5,10 +5,10 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from app.core.trading_window import is_market_hours
+from app.core.container import build_analysis_service
 from app.repositories import AnalysisRepository, WatchlistRepository
-from app.scheduler import run_scheduled_batch
-from app.services import build_analysis_service
-from app.trading_window import is_market_hours
+from app.services.scheduler import run_scheduled_batch
 from tests.conftest import ALERT_WINDOW_UTC, FakeAnalysisAgent, FakeMarketDataProvider
 
 KST = ZoneInfo("Asia/Seoul")
@@ -36,17 +36,16 @@ def test_run_scheduled_batch_accumulates_results(db_session, market_data, agent,
         market_data_provider=market_data,
         agent=agent,
         alert_notifier=alert_notifier,
+        alert_window_checker=lambda now: True,
         now_provider=lambda: ALERT_WINDOW_UTC,
     )
 
     first = run_scheduled_batch(
-        db_session,
         analysis_service=service,
         ignore_market_hours=True,
         now=ALERT_WINDOW_UTC,
     )
     second = run_scheduled_batch(
-        db_session,
         analysis_service=service,
         ignore_market_hours=True,
         now=ALERT_WINDOW_UTC,
@@ -66,11 +65,11 @@ def test_run_scheduled_batch_skips_outside_market_hours(db_session, market_data,
         market_data_provider=market_data,
         agent=agent,
         alert_notifier=alert_notifier,
+        alert_window_checker=lambda now: True,
     )
     outside = datetime(2026, 6, 2, 7, 0, tzinfo=KST)
 
     result = run_scheduled_batch(
-        db_session,
         analysis_service=service,
         ignore_market_hours=False,
         now=outside,
@@ -81,8 +80,13 @@ def test_run_scheduled_batch_skips_outside_market_hours(db_session, market_data,
     assert agent.calls == []
 
 
-def test_run_scheduled_batch_empty_watchlist(db_session):
-    result = run_scheduled_batch(db_session, ignore_market_hours=True, now=ALERT_WINDOW_UTC)
+def test_run_scheduled_batch_empty_watchlist(db_session, alert_notifier):
+    service = build_analysis_service(
+        db_session,
+        alert_notifier=alert_notifier,
+        alert_window_checker=lambda now: True,
+    )
+    result = run_scheduled_batch(service, ignore_market_hours=True, now=ALERT_WINDOW_UTC)
 
     assert result.ran is True
     assert result.symbols_analyzed == []
@@ -112,17 +116,16 @@ def test_alert_sent_only_once_for_same_conditions(db_session, alert_notifier):
         db_session,
         agent=agent,
         alert_notifier=alert_notifier,
+        alert_window_checker=lambda now: True,
         now_provider=lambda: ALERT_WINDOW_UTC,
     )
 
     run_scheduled_batch(
-        db_session,
         analysis_service=service,
         ignore_market_hours=True,
         now=ALERT_WINDOW_UTC,
     )
     run_scheduled_batch(
-        db_session,
         analysis_service=service,
         ignore_market_hours=True,
         now=ALERT_WINDOW_UTC,
@@ -140,10 +143,14 @@ def test_scheduler_run_endpoint(client, db_session, market_data, agent, alert_no
         market_data_provider=market_data,
         agent=agent,
         alert_notifier=alert_notifier,
+        alert_window_checker=lambda now: True,
         now_provider=lambda: ALERT_WINDOW_UTC,
     )
 
-    with patch("app.scheduler.build_analysis_service", return_value=service):
+    from app.api.deps import get_analysis_service
+
+    client.app.dependency_overrides[get_analysis_service] = lambda: service
+    with patch("app.api.routes.run_scheduled_batch", wraps=run_scheduled_batch):
         response = client.post("/scheduler/run?force=true")
 
     assert response.status_code == 200
