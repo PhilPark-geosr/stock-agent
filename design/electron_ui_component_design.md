@@ -64,33 +64,47 @@ Electron은 새 백엔드를 만들지 않고 기존 FastAPI를 그대로 데스
 
 ```mermaid
 flowchart TB
-    SCREEN["관심종목 분석 앱 (src/renderer.js)"] --> SIDE["화면 전환 메뉴 (src/components/layout.js)"]
-    SCREEN --> MAINVIEW["선택 화면 영역 (src/components/layout.js)"]
-    SCREEN --> TOAST["사용자 동작 결과 알림 (src/components/toast.js)"]
+    SCREEN["관심종목 분석 앱 부팅 (src/renderer.js)"] --> SHELL["앱 화면 틀 (src/components/layout/app-shell.js)"]
+    SCREEN --> STATE["앱 상태와 화면 모델 (src/state/app-state.js)"]
+    SCREEN --> SERVICES["백엔드 접근점 (src/services/backend-service.js)"]
+    SCREEN --> CONTROLLERS["이벤트 흐름 제어 (src/controllers/*.js)"]
+
+    SHELL --> SIDE["화면 전환 메뉴 (src/components/layout/sidebar.js)"]
+    SHELL --> TOP["상단 조작 영역 (src/components/layout/topbar.js)"]
+    SHELL --> MAINVIEW["선택 화면 영역 (src/renderer.js)"]
+    SHELL --> TOAST["사용자 동작 결과 알림 (src/components/ui/toast.js)"]
+    SHELL --> DIALOG["검증/분석 실패 다이얼로그 (src/components/ui/dialog.js)"]
+
+    SERVICES --> PRELOAD["허용된 백엔드 API (preload.js)"]
+    PRELOAD --> MAIN["로컬 HTTP 요청과 FastAPI 실행 (main.js)"]
+
+    CONTROLLERS --> NAV_CONTROLLER["화면 전환 (src/controllers/navigation-controller.js)"]
+    CONTROLLERS --> WATCH_CONTROLLER["관심종목 흐름 (src/controllers/watchlist-controller.js)"]
+    CONTROLLERS --> ANALYSIS_CONTROLLER["분석 조회/실행 흐름 (src/controllers/analysis-controller.js)"]
+    CONTROLLERS --> ALERT_CONTROLLER["알림 조건 흐름 (src/controllers/alerts-controller.js)"]
 
     SIDE --> BRAND["서비스명 표시"]
     SIDE --> FLOW["관심종목 / 최신 분석 / 이력 / 알림 메뉴"]
     SIDE --> NOTICE["백엔드 연결 상태"]
 
-    MAINVIEW --> TOP["상단 조작 영역 (src/components/layout.js)"]
     MAINVIEW --> GRID["현재 선택된 화면 1개 표시"]
 
     TOP --> SEARCH["관심종목 검색"]
     TOP --> RUN["수동 분석 실행"]
 
-    GRID --> WATCH["관심종목 영역 (src/features/watchlist.js)"]
-    GRID --> WORK["분석 결과 영역 (src/features/analysis.js)"]
+    GRID --> WATCH["관심종목 영역 (src/components/watchlist/watchlist-panel.js)"]
+    GRID --> ANALYSIS_VIEW["최신 분석 화면 (src/components/analysis/analysis-overview.js)"]
+    GRID --> HISTORY_VIEW["분석 이력 화면 (src/components/analysis/analysis-history-panel.js)"]
+    GRID --> CONDITIONS["사용자 알림 조건 화면 (src/components/alerts/alert-conditions-panel.js)"]
 
-    WATCH --> WATCH_ITEMS["관심종목 행 x N"]
+    WATCH --> WATCH_ITEMS["관심종목 행 x N (src/components/watchlist/watchlist-row.js)"]
     WATCH --> ADD["관심종목 추가"]
     WATCH --> DELETE["관심종목 삭제"]
 
-    WORK --> STATUS["현재 상태 요약"]
-    WORK --> ANALYSIS["분석 상세 영역"]
-    WORK --> INSIGHT["분석 근거 영역"]
-    WORK --> METRICS["주요 지표 영역"]
-    WORK --> HISTORY["분석 이력 영역"]
-    WORK --> CONDITIONS["사용자 알림 조건 영역 (src/features/alerts.js)"]
+    ANALYSIS_VIEW --> STATUS["현재 상태 요약"]
+    ANALYSIS_VIEW --> ANALYSIS["분석 상세 영역"]
+    ANALYSIS_VIEW --> INSIGHT["분석 근거 영역 (src/components/analysis/insight-panel.js)"]
+    ANALYSIS_VIEW --> METRICS["주요 지표 영역 (src/components/analysis/metrics-panel.js)"]
 
     STATUS --> SELECTED["선택 종목"]
     STATUS --> SCHEDULER["스케줄러 실행 상태"]
@@ -104,13 +118,17 @@ flowchart TB
     INSIGHT --> REASONS["핵심 근거"]
     INSIGHT --> RISKS["위험 요인"]
 
-    HISTORY --> HISTORY_ROW["분석 이력 행 x N"]
-    HISTORY --> LATEST["최신 분석 보기"]
+    HISTORY_VIEW --> HISTORY_ROW["분석 이력 행 x N"]
+    HISTORY_VIEW --> LATEST["최신 분석 보기"]
     CONDITIONS --> CONDITION_FORM["알림 조건 검증·저장"]
+    CONDITIONS --> CONDITION_ITEM["알림 조건 행 x N (src/components/alerts/alert-condition-item.js)"]
     CONDITIONS --> KAKAO_LOGIN["카카오 로그인"]
+
+    ANALYSIS_CONTROLLER --> DIALOG
+    ALERT_CONTROLLER --> DIALOG
 ```
 
-괄호 안 경로는 해당 UI 영역을 생성하거나 렌더링하는 구현 파일이다. 하위 항목은 바로 위에 표시된 파일에 포함된다.
+괄호 안 경로는 해당 UI 영역을 생성하거나 렌더링하는 구현 파일이다. `controllers`는 클릭, 제출, API 호출 후 화면 갱신 흐름을 연결하고, `state`는 API 응답을 화면 모델로 정규화한다.
 
 ## 7. 주요 컴포넌트 책임
 
@@ -126,17 +144,32 @@ flowchart TB
 | 주요 지표 카드 | `MarketIndicators`, 알림 조건 | 없음 | 선택 종목 기준 지표 표시 |
 | 분석 이력 목록 | `AnalysisResultHistoryItem[]` | 이력 행 클릭 | 상세 카드가 해당 결과로 교체 |
 | 사용자 알림 조건 | `CustomAlertConditionRead[]` | 저장 또는 삭제 | 검증 결과와 조건 목록 갱신 |
+| 검증/분석 실패 다이얼로그 | 사용자용 실패 메시지 | 확인, 바깥 영역 클릭, Esc | 원본 에러는 콘솔에만 남기고 화면에는 정리된 안내 표시 |
 
 구현 파일은 역할에 따라 다음처럼 대응한다.
 
 | 구현 모듈 | 담당 UI 컴포넌트 |
 | --- | --- |
-| `src/components/layout.js` | 앱 화면 틀, 좌측 흐름 안내, 상단 조작 영역 |
-| `src/components/toast.js` | 공통 사용자 알림 |
-| `src/features/watchlist.js` | 관심종목 영역, 관심종목 행, 종목 추가 입력 |
-| `src/features/analysis.js` | 현재 상태 요약, 분석 상세, 분석 근거, 주요 지표, 분석 이력 |
-| `src/features/alerts.js` | 사용자 알림 조건, 카카오 로그인 |
-| `src/renderer.js` | API 응답과 선택 상태 관리, 컴포넌트 간 이벤트 연결 |
+| `src/components/layout/app-shell.js` | 앱 화면 틀, 공통 toast/dialog 포함 |
+| `src/components/layout/sidebar.js` | 좌측 흐름 안내, 백엔드 연결 상태 |
+| `src/components/layout/topbar.js` | 종목 검색, 수동 분석 실행 버튼 |
+| `src/components/ui/toast.js` | 짧은 사용자 동작 결과 알림 |
+| `src/components/ui/dialog.js` | 검증 실패, 분석 실패 등 재사용 다이얼로그 |
+| `src/components/watchlist/watchlist-panel.js` | 관심종목 영역, 종목 추가 입력 |
+| `src/components/watchlist/watchlist-row.js` | 관심종목 행, 선택/삭제 버튼 |
+| `src/components/analysis/analysis-overview.js` | 현재 상태 요약, 분석 상세 |
+| `src/components/analysis/insight-panel.js` | 핵심 근거, 위험 요인 카드 |
+| `src/components/analysis/metrics-panel.js` | 주요 지표 카드 |
+| `src/components/analysis/analysis-history-panel.js` | 분석 이력 목록과 최신 분석 보기 |
+| `src/components/alerts/alert-conditions-panel.js` | 사용자 알림 조건 입력, 목록 영역 |
+| `src/components/alerts/alert-condition-item.js` | 알림 조건 행과 삭제 버튼 |
+| `src/renderer.js` | 앱 부팅, 화면 마운트, 컨트롤러 조립 |
+| `src/state/app-state.js` | 선택 상태, 분석 응답 정규화, 화면 모델 생성 |
+| `src/services/backend-service.js` | preload API 접근점 |
+| `src/controllers/navigation-controller.js` | 독립 화면 전환 |
+| `src/controllers/watchlist-controller.js` | 관심종목 검색, 추가, 선택, 삭제 흐름 |
+| `src/controllers/analysis-controller.js` | 최신 분석 조회, 이력 상세, 수동 분석 실행, 실패 다이얼로그 |
+| `src/controllers/alerts-controller.js` | 알림 조건 검증/저장/삭제, 카카오 로그인, 실패 다이얼로그 |
 | `preload.js` | renderer에 허용된 백엔드 API 노출 |
 | `main.js` | FastAPI 자동 실행, HTTP 요청, 외부 로그인 열기 |
 
@@ -150,12 +183,18 @@ stateDiagram-v2
 
     화면_준비됨 --> 분석_실행중: 수동 분석 실행 클릭
     분석_실행중 --> 화면_준비됨: 스케줄러 상태 완료
+    분석_실행중 --> 실패_다이얼로그: 모델 검증 또는 분석 실패
+    실패_다이얼로그 --> 화면_준비됨: 확인
 
     화면_준비됨 --> 이력_선택됨: 이력 행 클릭
     이력_선택됨 --> 화면_준비됨: 최신 분석 보기 클릭
 
     화면_준비됨 --> 종목_추가됨: 종목 코드 추가
     종목_추가됨 --> 화면_준비됨: 관심종목 API 재조회
+
+    화면_준비됨 --> 조건_검증중: 알림 조건 저장
+    조건_검증중 --> 화면_준비됨: 검증 성공 후 목록 갱신
+    조건_검증중 --> 실패_다이얼로그: 모델 검증 실패
 ```
 
 ## 9. 상세 화면 설계
@@ -188,6 +227,8 @@ stateDiagram-v2
 |                      | | 사용자 알림 조건: 규칙 입력, 저장, 삭제, 로그인     | |
 |                      | +-----------------------------------------------------+ |
 +----------------------+---------------------------------------------------------+
+| [다이얼로그] 분석/검증 실패 시 사용자용 메시지와 확인 버튼 표시              |
++--------------------------------------------------------------------------------+
 ```
 
 ## 10. 실제 API 연결
@@ -200,4 +241,7 @@ stateDiagram-v2
 | 종목 선택 | `GET /stocks/{symbol}/analysis?limit=20` | 이력 테이블 렌더링 |
 | 이력 클릭 | `GET /stocks/{symbol}/analysis/{id}` | 상세 카드 교체 |
 | 수동 분석 실행 | `POST /scheduler/run?force=true` | 완료 후 최신 분석/이력 재조회 |
+| 수동 분석 실패 | `POST /scheduler/run?force=true` 오류 또는 실패 결과 | 원본 에러 대신 재사용 다이얼로그 표시 |
 | 알림 표시 | 분석 응답의 `should_alert`, `alert_reason`, `alert_sent_at` | 알림 상태 카드 갱신 |
+| 알림 조건 저장 | `POST /alert-conditions` | 검증 성공 시 목록 갱신 |
+| 알림 조건 검증 실패 | `POST /alert-conditions` 오류 | 원본 에러 대신 재사용 다이얼로그 표시 |

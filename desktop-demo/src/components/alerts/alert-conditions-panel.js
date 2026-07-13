@@ -1,4 +1,6 @@
 (() => {
+const { AlertConditionItem } = window.StockAgent;
+
 function AlertConditionsPanel() {
   return `
     <section id="alert-conditions-section" class="card alert-conditions-card">
@@ -19,28 +21,13 @@ function AlertConditionsPanel() {
 function renderAlertConditions(conditions, onDelete) {
   const list = document.querySelector("#alert-condition-list");
   if (!conditions.length) {
-    list.innerHTML = '<p class="empty-state">저장된 사용자 알림 조건이 없습니다.</p>';
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "저장된 사용자 알림 조건이 없습니다.";
+    list.replaceChildren(empty);
     return;
   }
-  list.replaceChildren(...conditions.map((condition) => {
-    const item = document.createElement("article");
-    item.className = "alert-condition-item";
-    const content = document.createElement("div");
-    const title = document.createElement("strong");
-    title.textContent = `${condition.symbol} · ${condition.name}`;
-    const rule = document.createElement("p");
-    rule.textContent = condition.user_rule;
-    const summary = document.createElement("small");
-    summary.textContent = condition.validation_summary;
-    content.append(title, rule, summary);
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.className = "text-button danger-text";
-    deleteButton.textContent = "삭제";
-    deleteButton.addEventListener("click", () => onDelete(condition.id));
-    item.append(content, deleteButton);
-    return item;
-  }));
+  list.replaceChildren(...conditions.map((condition) => AlertConditionItem(condition, onDelete)));
 }
 
 window.StockAgent = { ...window.StockAgent, AlertConditionsPanel, renderAlertConditions };

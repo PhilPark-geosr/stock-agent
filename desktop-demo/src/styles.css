@@ -188,6 +188,55 @@ h1 { margin: 0; font-size: 27px; letter-spacing: -.6px; }
 .toast { position: fixed; right: 36px; bottom: 34px; padding: 12px 17px; border-radius: 11px; color: #fff; background: #173f35; box-shadow: 0 10px 30px rgba(23,63,53,.22); font-size: 12px; opacity: 0; transform: translateY(12px); pointer-events: none; transition: .2s ease; }
 .toast.show { opacity: 1; transform: translateY(0); }
 
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(16, 47, 40, .42);
+  backdrop-filter: blur(4px);
+}
+.dialog-backdrop[hidden] { display: none; }
+.dialog-card {
+  width: min(440px, 100%);
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 16px;
+  border: 1px solid #dce5e1;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(16, 47, 40, .25);
+}
+.dialog-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #17332c;
+  background: #f0d98d;
+  font-size: 22px;
+  font-weight: 900;
+}
+.dialog-content { min-width: 0; }
+.dialog-eyebrow {
+  margin: 0 0 7px;
+  color: #b4772f;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .8px;
+}
+.dialog-card h2 { margin: 0; font-size: 19px; letter-spacing: -.2px; }
+.dialog-card p { margin: 10px 0 0; color: #586c65; font-size: 13px; line-height: 1.55; }
+.dialog-actions {
+  grid-column: 2;
+  display: flex;
+  justify-content: flex-end;
+}
+
 @media (max-width: 1160px) {
   .main-content { padding: 27px 25px; }
   .topbar { align-items: flex-start; }

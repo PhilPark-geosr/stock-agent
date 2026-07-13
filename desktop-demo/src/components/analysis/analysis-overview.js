@@ -1,4 +1,5 @@
 (() => {
+const { InsightPanel, MetricsPanel } = window.StockAgent;
 const formatPrice = (value) => new Intl.NumberFormat("ko-KR").format(value);
 
 function verdictClass(verdict) {
@@ -32,29 +33,13 @@ function AnalysisOverview() {
     </div>`;
 }
 
-function InsightPanel(title, source, id, isRisk = false) {
-  return `<article class="card insight-card"><div class="section-heading"><h2>${title}</h2><span>${source}</span></div><ul id="${id}" class="insight-list${isRisk ? " risk-list" : ""}"></ul></article>`;
-}
-
-function MetricsPanel() {
-  return `<section class="card metrics-card">
-    <div class="metric"><span>거래량 비율</span><strong id="volume-ratio"></strong><small>MarketIndicators</small></div>
-    <div class="metric"><span>20일 저점</span><strong id="low-price"></strong><small>low_20</small></div>
-    <div class="metric"><span>20일 고점</span><strong id="high-price"></strong><small>high_20</small></div>
-    <div class="metric"><span>알림 조건</span><strong id="matched-alerts"></strong><small>matched_alert_conditions</small></div>
-  </section>`;
-}
-
-function AnalysisHistoryPanel() {
-  return `<section id="history-section" class="card history-card">
-    <div class="section-heading"><div><h2>분석 이력</h2><p>API: GET /stocks/{symbol}/analysis</p></div><button id="latest-button" class="text-button" type="button">최신 분석 보기</button></div>
-    <div class="history-table-head" aria-hidden="true"><span>ID</span><span>분석 시각</span><span>판단</span><span>요약</span><span></span></div>
-    <div id="history-list" class="history-list"></div>
-  </section>`;
-}
-
 function renderList(selector, items) {
-  document.querySelector(selector).innerHTML = items.map((item) => `<li>${item}</li>`).join("");
+  const list = document.querySelector(selector);
+  list.replaceChildren(...items.map((item) => {
+    const row = document.createElement("li");
+    row.textContent = item;
+    return row;
+  }));
 }
 
 function renderAnalysis(stock, analysis) {
@@ -84,21 +69,5 @@ function renderAnalysis(stock, analysis) {
   renderList("#risk-list", analysis.risks);
 }
 
-function renderHistory(stock, selectedAnalysisId, onSelect) {
-  const list = document.querySelector("#history-list");
-  if (!stock.analyses.length) {
-    list.innerHTML = '<p class="empty-state">저장된 분석 이력이 없습니다.</p>';
-    return;
-  }
-  list.replaceChildren(...stock.analyses.map((analysis) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `history-item${analysis.id === selectedAnalysisId ? " active" : ""}`;
-    button.innerHTML = `<span>#${analysis.id}</span><span>${analysis.time}</span><span class="history-verdict">${analysis.verdict}</span><span class="history-summary">${analysis.summary}</span><span class="history-arrow">›</span>`;
-    button.addEventListener("click", () => onSelect(analysis.id));
-    return button;
-  }));
-}
-
-window.StockAgent = { ...window.StockAgent, AnalysisOverview, AnalysisHistoryPanel, renderAnalysis, renderHistory };
+window.StockAgent = { ...window.StockAgent, AnalysisOverview, renderAnalysis };
 })();

@@ -30,23 +30,25 @@ Electron 42.4.1을 사용합니다. Node.js 18 환경에서는 설치되지 않�
 
 ## 컴포넌트 구조
 
-화면 전체를 한 파일에서 수정하지 않도록 레이아웃과 기능 영역을 분리했습니다. React를 추가한 구조는 아니며, 현재 데모의 순수 JavaScript 방식을 유지한 작은 UI 모듈입니다.
+화면 전체를 한 파일에서 수정하지 않도록 UI를 컴포넌트 대분류로 나눴습니다. React를 추가한 구조는 아니며, 현재 데모의 순수 JavaScript 방식을 유지한 작은 UI 모듈입니다.
 
 ```text
 src/
   components/
-    layout.js       # 앱 shell, 사이드바, 상단 검색/실행 영역
-    toast.js        # 공통 사용자 알림
-  features/
-    watchlist.js    # 관심종목 마크업과 목록 렌더링
-    analysis.js     # 최신 분석, 근거/위험, 지표, 분석 이력
-    alerts.js       # 사용자 알림 조건과 카카오 로그인
+    layout/         # 앱 shell, 사이드바, 상단 검색/실행 영역
+    ui/             # toast 같은 공통 UI
+    watchlist/      # 관심종목 패널과 행 컴포넌트
+    analysis/       # 최신 분석, 근거/위험, 지표, 분석 이력 컴포넌트
+    alerts/         # 사용자 알림 조건과 카카오 로그인 컴포넌트
+  controllers/      # 이벤트 바인딩과 화면 흐름 제어
+  services/         # preload API를 감싼 백엔드 접근점
+  state/            # 앱 상태, API 응답 정규화, 화면 모델
   index.html        # 앱 마운트 지점
-  renderer.js       # API 응답 상태와 컴포넌트 이벤트 연결
+  renderer.js       # 앱 부팅과 컨트롤러 조립
   styles.css        # 공통 화면 스타일
 ```
 
-기능을 확장할 때는 해당 `features` 모듈에 UI와 렌더링 함수를 추가하고, `renderer.js`에서는 상태와 이벤트만 연결합니다. 여러 기능에서 함께 쓰는 UI는 `components`에 둡니다.
+기능을 확장할 때는 먼저 `components/{화면영역}`에 UI 조각을 추가합니다. API 호출은 `services`, 상태 변환은 `state`, 클릭/submit 같은 흐름 제어는 `controllers`에 둬서 컴포넌트가 화면 표현에 집중하도록 유지합니다.
 
 ## 포함된 동작
 
