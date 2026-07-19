@@ -208,3 +208,94 @@ def test_index_page_response(client):
     assert "text/html" in response.headers["content-type"]
     assert 'value="005930.KS"' in response.text
     assert "/stocks/" in response.text
+    assert "이전 분석 이력" in response.text
+
+
+def test_list_analysis_history_returns_stored_rows_newest_first(client, db_session):
+    repo = AnalysisRepository(db_session)
+    first = repo.save(
+        symbol="005930.KS",
+        overall_judgment="neutral",
+        summary="first run",
+        key_reasons=[],
+        risk_factors=[],
+        support_levels={},
+        should_alert=False,
+        triggered_alerts=[],
+        alert_reason=None,
+        raw_result={"summary": "first run"},
+    )
+    second = repo.save(
+        symbol="005930.KS",
+        overall_judgment="상승",
+        summary="second run",
+        key_reasons=[],
+        risk_factors=[],
+        support_levels={},
+        should_alert=False,
+        triggered_alerts=[],
+        alert_reason=None,
+        raw_result={"summary": "second run"},
+    )
+
+    response = client.get("/stocks/005930.KS/analysis?limit=10")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["id"] for item in body] == [second.id, first.id]
+    assert body[0]["summary"] == "second run"
+    assert "raw_result" not in body[0]
+
+
+def test_get_analysis_by_id_returns_single_row(client, db_session):
+    stored = AnalysisRepository(db_session).save(
+        symbol="005930.KS",
+        overall_judgment="neutral",
+        summary="history detail",
+        key_reasons=["reason"],
+        risk_factors=[],
+        support_levels={"latest_close": 72000},
+        should_alert=False,
+        triggered_alerts=[],
+        alert_reason=None,
+        raw_result={"summary": "history detail"},
+    )
+
+    response = client.get(f"/stocks/005930.KS/analysis/{stored.id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == stored.id
+    assert body["summary"] == "history detail"
+    assert body["raw_result"] == {"summary": "history detail"}
+
+
+def test_get_analysis_by_id_not_found(client):
+    response = client.get("/stocks/005930.KS/analysis/9999")
+
+    assert response.status_code == 404
+
+
+def test_list_analysis_history_does_not_trigger_new_analysis(
+    client, db_session, market_data, agent, alert_notifier
+):
+    AnalysisRepository(db_session).save(
+        symbol="005930.KS",
+        overall_judgment="neutral",
+        summary="scheduler saved",
+        key_reasons=[],
+        risk_factors=[],
+        support_levels={},
+        should_alert=False,
+        triggered_alerts=[],
+        alert_reason=None,
+        raw_result={},
+    )
+
+    response = client.get("/stocks/005930.KS/analysis")
+
+    assert response.status_code == 200
+    assert response.json()[0]["summary"] == "scheduler saved"
+    assert market_data.calls == []
+    assert agent.calls == []
+    assert alert_notifier.messages == []

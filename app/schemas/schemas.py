@@ -171,3 +171,18 @@ class AnalysisResultRead(BaseModel):
     triggered_alerts: List[str]
     alert_reason: Optional[str]
     raw_result: Optional[Dict[str, Any]]
+
+
+class AnalysisResultHistoryItem(BaseModel):
+    """Lightweight row for analysis history listings."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    symbol: str
+    analyzed_at: datetime
+    data_timestamp: Optional[datetime]
+    overall_judgment: str
+    summary: str
+    should_alert: bool
+    triggered_alerts: List[str]
