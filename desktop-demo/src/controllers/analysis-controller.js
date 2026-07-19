@@ -16,6 +16,22 @@ function analysisFailureDialog(error) {
 }
 
 function createAnalysisController({ backend, renderScreen, showToast, showDialog, showView }) {
+  function applySelectedAnalysis(symbol, analysisResult, historyResult) {
+    if (state.selectedSymbol !== symbol) return false;
+    const analysis = normalizeAnalysis(analysisResult);
+    state.analysisDetails.set(analysis.id, analysis);
+    state.selectedAnalysis = analysis;
+    state.analysisHistory = historyResult.map(normalizeHistoryItem);
+    if (!state.analysisHistory.some((item) => item.id === analysis.id)) {
+      state.analysisHistory.unshift(analysis);
+    }
+    document.querySelector("#scheduler-status").textContent = "대기";
+    const stock = state.stocks.find((item) => item.symbol === symbol);
+    if (stock) stock.alertStatus = analysis.shouldAlert ? "전송 대상" : "조건 미충족";
+    renderScreen();
+    return true;
+  }
+
   async function loadSelectedAnalysis() {
     const symbol = state.selectedSymbol;
     if (!symbol) return;
@@ -26,17 +42,7 @@ function createAnalysisController({ backend, renderScreen, showToast, showDialog
         backend.analysisHistory(symbol)
       ]);
       if (state.selectedSymbol !== symbol) return;
-      const latest = normalizeAnalysis(latestResult);
-      state.analysisDetails.set(latest.id, latest);
-      state.selectedAnalysis = latest;
-      state.analysisHistory = historyResult.map(normalizeHistoryItem);
-      if (!state.analysisHistory.some((item) => item.id === latest.id)) {
-        state.analysisHistory.unshift(latest);
-      }
-      document.querySelector("#scheduler-status").textContent = "대기";
-      const stock = state.stocks.find((item) => item.symbol === symbol);
-      if (stock) stock.alertStatus = latest.shouldAlert ? "전송 대상" : "조건 미충족";
-      renderScreen();
+      applySelectedAnalysis(symbol, latestResult, historyResult);
     } catch (error) {
       if (state.selectedSymbol !== symbol) return;
       state.selectedAnalysis = emptyAnalysis(symbol);
@@ -76,22 +82,21 @@ function createAnalysisController({ backend, renderScreen, showToast, showDialog
     });
 
     document.querySelector("#run-analysis-button").addEventListener("click", async (event) => {
+      const symbol = state.selectedSymbol;
+      if (!symbol) {
+        showToast("분석할 종목을 선택해 주세요.");
+        return;
+      }
       const button = event.currentTarget;
       button.disabled = true;
       document.querySelector("#scheduler-status").textContent = "실행 중";
       try {
-        const result = await backend.runScheduler();
-        const analyzed = result.symbols_analyzed?.length || 0;
-        const failed = result.symbols_failed?.length || 0;
-        showToast(`스케줄러 완료: 성공 ${analyzed}개, 실패 ${failed}개`);
-        if (failed > 0) {
-          showDialog({
-            eyebrow: "분석 일부 실패",
-            title: "일부 종목 분석이 실패했습니다",
-            message: "모델 검증 또는 데이터 수집 과정에서 일부 종목을 처리하지 못했습니다. 잠시 후 다시 실행해 주세요."
-          });
+        const analysisResult = await backend.runAnalysis(symbol);
+        const historyResult = await backend.analysisHistory(symbol);
+        if (applySelectedAnalysis(symbol, analysisResult, historyResult)) {
+          showToast(`${symbol} 새 분석을 저장했습니다.`);
+          showView("analysis-view");
         }
-        await loadSelectedAnalysis();
       } catch (error) {
         document.querySelector("#scheduler-status").textContent = "실패";
         showDialog(analysisFailureDialog(error));

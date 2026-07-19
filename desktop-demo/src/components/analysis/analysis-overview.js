@@ -13,7 +13,7 @@ function AnalysisOverview() {
     <div class="analysis-workspace">
       <section class="status-strip">
         <article class="status-card"><span>선택 종목</span><strong id="selected-symbol"></strong><small id="selected-name"></small></article>
-        <article class="status-card"><span>스케줄러</span><strong id="scheduler-status">대기</strong><small>POST /scheduler/run?force=true</small></article>
+        <article class="status-card"><span>수동 분석</span><strong id="scheduler-status">대기</strong><small>POST /stocks/{symbol}/analysis</small></article>
         <article class="status-card"><span>데이터 기준</span><strong id="data-time"></strong><small>yfinance 시세 스냅샷</small></article>
         <article class="status-card"><span>알림</span><strong id="alert-status"></strong><small id="alert-detail"></small></article>
       </section>
