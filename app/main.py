@@ -5,12 +5,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.database import SessionLocal, init_db
-from app.kakao_auth import kakao_settings
-from app.routes import router
-from app.scheduler import start_scheduler
-from app.scheduler_config import scheduler_settings
-from app.settings import load_environment
+from app.api.routes import router
+from app.core.database import SessionLocal, init_db
+from app.core.scheduler_config import scheduler_settings
+from app.core.scheduler_runtime import start_scheduler
+from app.core.settings import load_environment
+from app.integrations.kakao_auth import kakao_settings
 
 logging.basicConfig(level=logging.INFO)
 

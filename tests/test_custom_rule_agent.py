@@ -3,12 +3,12 @@ from __future__ import annotations
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 
-from app.alert_conditions import CustomAlertCondition
-from app.custom_rule_agent import (
+from app.application.custom_rule_agent import (
     CustomRuleAgentError,
     LangGraphCustomRuleAgent,
     build_custom_rule_llm,
 )
+from app.domain.alert_conditions import CustomAlertCondition
 
 
 @tool
