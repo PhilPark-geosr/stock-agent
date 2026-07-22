@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld("desktop", {
     addWatchlist: (symbol) => request("POST", "/watchlist", { symbol }),
     deleteWatchlist: (symbol) => request("DELETE", `/watchlist/${encodeURIComponent(symbol)}`),
     latestAnalysis: (symbol) => request("GET", `/stocks/${encodeURIComponent(symbol)}/analysis/latest`),
+    runAnalysis: (symbol) => request("POST", `/stocks/${encodeURIComponent(symbol)}/analysis`),
     analysisHistory: (symbol) => request("GET", `/stocks/${encodeURIComponent(symbol)}/analysis?limit=20`),
     analysisById: (symbol, resultId) => request("GET", `/stocks/${encodeURIComponent(symbol)}/analysis/${resultId}`),
     runScheduler: () => request("POST", "/scheduler/run?force=true"),

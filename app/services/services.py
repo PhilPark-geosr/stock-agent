@@ -29,6 +29,9 @@ class AnalysisProvider(Protocol):
     def get_latest_analysis(self, symbol: str) -> StoredAnalysisResult:
         """Return the latest stored analysis, creating one when none exists."""
 
+    def run_manual_analysis(self, symbol: str) -> StoredAnalysisResult:
+        """Create and store a fresh analysis for one symbol."""
+
     def list_analysis_history(
         self,
         symbol: str,
@@ -76,6 +79,15 @@ class AnalysisService:
         if latest is not None:
             self._try_send_pending_alert(latest)
             return latest
+
+        stored = self.analyze_and_store(normalized_symbol)
+        self._try_send_pending_alert(stored)
+        return stored
+
+    def run_manual_analysis(self, symbol: str) -> StoredAnalysisResult:
+        normalized_symbol = normalize_symbol(symbol)
+        if not normalized_symbol:
+            raise ValueError("symbol is required")
 
         stored = self.analyze_and_store(normalized_symbol)
         self._try_send_pending_alert(stored)

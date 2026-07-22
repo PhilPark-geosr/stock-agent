@@ -210,6 +210,28 @@ def list_analysis_history(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
+@router.post(
+    "/stocks/{symbol}/analysis",
+    response_model=AnalysisResultRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def run_manual_analysis(
+    symbol: str,
+    analysis_service: AnalysisProvider = Depends(get_analysis_service),
+):
+    try:
+        result = analysis_service.run_manual_analysis(symbol)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except MarketDataError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    except (AnalysisAgentError, AgentConfigurationError, CustomRuleAgentError) as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    except AlertNotifyError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return result
+
+
 @router.get("/stocks/{symbol}/analysis/latest", response_model=AnalysisResultRead)
 def get_latest_analysis(
     symbol: str,
