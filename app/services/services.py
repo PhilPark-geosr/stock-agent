@@ -15,7 +15,7 @@ from app.interfaces.analysis import AnalysisAgent
 from app.interfaces.market_data import MarketDataProvider
 from app.interfaces.notifications import AlertNotifier, AlertNotifyError
 from app.interfaces.repositories import AlertConditionRepository, AnalysisRepository, WatchlistRepository
-from app.schemas import model_to_dict
+from app.schemas import MarketDataSnapshot, model_to_dict
 
 
 @dataclass
@@ -137,13 +137,16 @@ class AnalysisService:
         user_id: str = "default",
         briefing_type: str | None = None,
         trading_date: date | None = None,
+        market_data: MarketDataSnapshot | None = None,
     ) -> StoredAnalysisResult:
         normalized_symbol = normalize_symbol(symbol)
         if not normalized_symbol:
             raise ValueError("symbol is required")
 
-        market_data = self.market_data_provider.fetch(normalized_symbol)
-        custom_conditions = self.alert_condition_repository.list_enabled_for_symbol(normalized_symbol)
+        market_data = market_data or self.market_data_provider.fetch(normalized_symbol)
+        custom_conditions = self.alert_condition_repository.list_enabled_for_symbol(
+            normalized_symbol, user_id
+        )
         alert_conditions = [*DEFAULT_SYSTEM_ALERT_CONDITIONS, *custom_conditions]
         logger.info(
             "AnalysisService prepared analysis symbol=%s system_conditions=%d custom_conditions=%d",
@@ -229,6 +232,7 @@ class AnalysisService:
         if self.analysis_repository.has_sent_alert_for_conditions(
             stored.symbol,
             stored.triggered_alerts or [],
+            stored.user_id,
         ):
             return False
 

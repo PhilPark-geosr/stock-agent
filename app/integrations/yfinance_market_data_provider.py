@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from app.interfaces.market_data import MarketDataError, MarketDataProvider
+from app.interfaces.market_data import ClosingDataNotReadyError, MarketDataError, MarketDataProvider
 from app.schemas import MarketDataSnapshot, MarketIndicators, OHLCVRecord
 
 
@@ -25,6 +25,29 @@ class YFinanceMarketDataProvider(MarketDataProvider):
         self.max_records = max_records
 
     def fetch(self, symbol: str) -> MarketDataSnapshot:
+        history = self._fetch_history(
+            symbol,
+            period=self.period,
+            interval=self.interval,
+        )
+        return self._build_snapshot(symbol, history)
+
+    def fetch_close(self, symbol: str, trading_date: date) -> MarketDataSnapshot:
+        history = self._fetch_history(
+            symbol,
+            start=(trading_date - timedelta(days=90)).isoformat(),
+            end=(trading_date + timedelta(days=1)).isoformat(),
+            interval="1d",
+        )
+        clean_history = history.dropna(subset=["Open", "High", "Low", "Close"])
+        if clean_history.empty or clean_history.index[-1].date() != trading_date:
+            raise ClosingDataNotReadyError(
+                f"closing data for {symbol} on {trading_date.isoformat()} is not ready"
+            )
+        return self._build_snapshot(symbol, clean_history)
+
+    @staticmethod
+    def _fetch_history(symbol: str, **history_options: Any):
         try:
             import yfinance as yf
         except ImportError as exc:
@@ -33,10 +56,9 @@ class YFinanceMarketDataProvider(MarketDataProvider):
         ticker = yf.Ticker(symbol)
         try:
             history = ticker.history(
-                period=self.period,
-                interval=self.interval,
                 auto_adjust=False,
                 actions=False,
+                **history_options,
             )
         except Exception as exc:
             raise MarketDataError(f"failed to fetch yfinance history for {symbol}") from exc
@@ -50,6 +72,9 @@ class YFinanceMarketDataProvider(MarketDataProvider):
             missing = ", ".join(sorted(missing_columns))
             raise MarketDataError(f"market data for {symbol} is missing columns: {missing}")
 
+        return history
+
+    def _build_snapshot(self, symbol: str, history: Any) -> MarketDataSnapshot:
         clean_history = history.dropna(subset=["Open", "High", "Low", "Close"])
         if clean_history.empty:
             raise MarketDataError(f"market data for {symbol} has no usable OHLC rows")

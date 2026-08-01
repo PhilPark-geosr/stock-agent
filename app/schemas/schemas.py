@@ -61,6 +61,7 @@ class AnalysisResult(BaseModel):
     analysis_time: datetime
     data_time: datetime
     verdict: str
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     summary: str
     key_reasons: List[str]
     risk_factors: List[str]
@@ -194,6 +195,7 @@ class BriefingRunRequest(BaseModel):
     briefing_type: BriefingType = Field(alias="type")
     exchange: str = Field(min_length=2, max_length=24)
     trading_date: date
+    force: bool = False
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -249,6 +251,29 @@ class BriefingDeliveryRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class BriefingScopeRead(BaseModel):
+    id: int
+    source_type: str
+    source_value: str | None
+    resolved_symbols: list[str]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BriefingFailureRead(BaseModel):
+    id: int
+    symbol: str
+    error_code: str
+    message: str
+    retryable: bool
+    attempt_count: int
+    resolved_at: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class BriefingDetailRead(BriefingRead):
     items: list[BriefingItemRead] = Field(default_factory=list)
     deliveries: list[BriefingDeliveryRead] = Field(default_factory=list)
+    scopes: list[BriefingScopeRead] = Field(default_factory=list)
+    failures: list[BriefingFailureRead] = Field(default_factory=list)

@@ -43,10 +43,17 @@ class FakeMarketDataProvider:
         )
         self.error = error
         self.calls: list[str] = []
+        self.close_calls: list[tuple[str, object]] = []
 
     def fetch(self, symbol: str) -> MarketDataSnapshot:
         self.calls.append(symbol)
         if self.error is not None:
+            raise self.error
+        return self.snapshot.model_copy(update={"symbol": symbol})
+
+    def fetch_close(self, symbol: str, trading_date) -> MarketDataSnapshot:
+        self.close_calls.append((symbol, trading_date))
+        if self.error:
             raise self.error
         return self.snapshot.model_copy(update={"symbol": symbol})
 

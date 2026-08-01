@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -65,27 +67,46 @@ class WatchlistRepository(WatchlistRepositoryInterface):
         self.db.commit()
         return True
 
+    def list_user_ids(self) -> list[str]:
+        return list(
+            self.db.scalars(
+                select(WatchlistItem.user_id).distinct().order_by(WatchlistItem.user_id)
+            )
+        )
+
 
 class AlertConditionRepository(AlertConditionRepositoryInterface):
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list_enabled_for_symbol(self, symbol: str) -> list[CustomAlertCondition]:
+    def list_enabled_for_symbol(
+        self, symbol: str, user_id: str = "default"
+    ) -> list[CustomAlertCondition]:
         normalized = normalize_symbol(symbol)
         statement = (
             select(CustomAlertConditionRecord)
-            .where(CustomAlertConditionRecord.symbol == normalized)
+            .where(
+                CustomAlertConditionRecord.user_id == user_id,
+                CustomAlertConditionRecord.symbol == normalized,
+            )
             .where(CustomAlertConditionRecord.enabled.is_(True))
             .order_by(CustomAlertConditionRecord.id)
         )
         return [self._to_domain(row) for row in self.db.scalars(statement)]
 
-    def list(self) -> list[CustomAlertConditionRecord]:
-        return list(self.db.scalars(select(CustomAlertConditionRecord).order_by(CustomAlertConditionRecord.id)))
+    def list(self, user_id: str = "default") -> list[CustomAlertConditionRecord]:
+        return list(
+            self.db.scalars(
+                select(CustomAlertConditionRecord)
+                .where(CustomAlertConditionRecord.user_id == user_id)
+                .order_by(CustomAlertConditionRecord.id)
+            )
+        )
 
     def save_validated(
         self,
         *,
+        user_id: str = "default",
         symbol: str,
         user_rule: str,
         validation: RuleValidationResult,
@@ -95,6 +116,7 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
 
         normalized = normalize_symbol(symbol)
         record = CustomAlertConditionRecord(
+            user_id=user_id,
             symbol=normalized,
             name=validation.normalized_name,
             user_rule=user_rule.strip(),
@@ -111,6 +133,7 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
             self.db.rollback()
             existing = self.db.scalar(
                 select(CustomAlertConditionRecord).where(
+                    CustomAlertConditionRecord.user_id == user_id,
                     CustomAlertConditionRecord.symbol == normalized,
                     CustomAlertConditionRecord.user_rule == user_rule.strip(),
                 )
@@ -121,9 +144,9 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
         self.db.refresh(record)
         return record
 
-    def delete(self, condition_id: int) -> bool:
+    def delete(self, condition_id: int, user_id: str = "default") -> bool:
         record = self.db.get(CustomAlertConditionRecord, condition_id)
-        if record is None:
+        if record is None or record.user_id != user_id:
             return False
         self.db.delete(record)
         self.db.commit()
@@ -236,7 +259,9 @@ class AnalysisRepository(AnalysisRepositoryInterface):
         self.db.refresh(result)
         return result
 
-    def has_sent_alert_for_conditions(self, symbol: str, triggered_alerts: list[str]) -> bool:
+    def has_sent_alert_for_conditions(
+        self, symbol: str, triggered_alerts: list[str], user_id: str = "default"
+    ) -> bool:
         normalized = normalize_symbol(symbol)
         conditions_key = tuple(sorted(triggered_alerts or []))
         if not conditions_key:
@@ -244,7 +269,7 @@ class AnalysisRepository(AnalysisRepositoryInterface):
 
         statement = (
             select(AnalysisResult)
-            .where(AnalysisResult.symbol == normalized)
+            .where(AnalysisResult.user_id == user_id, AnalysisResult.symbol == normalized)
             .where(AnalysisResult.alert_sent_at.is_not(None))
         )
         for row in self.db.scalars(statement):

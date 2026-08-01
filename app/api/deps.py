@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.container import (
     build_analysis_service,
+    build_briefing_delivery_service,
     build_briefing_service,
     get_alert_notifier,
     get_analysis_agent,
@@ -24,6 +25,7 @@ from app.interfaces.repositories import (
 from app.interfaces.rule_validation import RuleValidationAgent
 from app.repositories import AlertConditionRepository, WatchlistRepository
 from app.services import AnalysisProvider, BriefingService
+from app.services.briefing_delivery import BriefingDeliveryService
 
 
 def get_rule_validation_agent() -> RuleValidationAgent:
@@ -61,6 +63,13 @@ def get_briefing_service(
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ) -> BriefingService:
     return build_briefing_service(db, analysis_service=analysis_service)
+
+
+def get_briefing_delivery_service(
+    db: Session = Depends(get_db),
+    alert_notifier: AlertNotifier = Depends(get_alert_notifier),
+) -> BriefingDeliveryService:
+    return build_briefing_delivery_service(db, notifier=alert_notifier)
 
 
 def get_watchlist_repository(db: Session = Depends(get_db)) -> WatchlistRepositoryInterface:

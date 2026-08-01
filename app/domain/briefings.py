@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from enum import StrEnum
 
 
@@ -55,7 +54,7 @@ def normalize_judgment(value: str | None) -> Judgment:
         return _JUDGMENT_ALIASES[compact]
     squashed = compact.replace("_", "")
     for alias, judgment in _JUDGMENT_ALIASES.items():
-        if alias.replace("_", "") in squashed:
+        if alias.replace("_", "") == squashed:
             return judgment
     return Judgment.UNKNOWN
 
@@ -74,15 +73,3 @@ def infer_exchange(symbol: str) -> str:
     if normalized.endswith((".KS", ".KQ")):
         return "KRX"
     return "US"
-
-
-def is_trading_day(exchange: str, trading_date: date) -> bool:
-    """Return the conservative built-in calendar result.
-
-    Weekends are rejected here. Production deployments can replace this policy
-    with an exchange-calendar adapter to cover local holidays and early closes.
-    """
-
-    if exchange.upper() not in {"KRX", "US", "NASDAQ", "NYSE"}:
-        raise ValueError("unsupported exchange")
-    return trading_date.weekday() < 5

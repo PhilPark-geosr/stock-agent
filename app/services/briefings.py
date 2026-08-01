@@ -4,15 +4,12 @@ import logging
 from datetime import date
 from typing import Protocol
 
-from app.domain.briefings import (
-    BriefingType,
-    compare_judgments,
-    infer_exchange,
-    is_trading_day,
-)
+from app.domain.briefings import BriefingType, compare_judgments, infer_exchange
 from app.domain.models import AnalysisResult, InvestmentBriefing, WatchlistItem
+from app.interfaces.market_data import ClosingDataNotReadyError, MarketDataError, MarketDataProvider
 from app.interfaces.repositories import AnalysisRepository, BriefingRepository, WatchlistRepository
-from app.interfaces.notifications import AlertNotifier
+from app.interfaces.trading_calendar import TradingCalendar
+from app.schemas import MarketDataSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +22,16 @@ class BriefingAnalysisProvider(Protocol):
         user_id: str = "default",
         briefing_type: str | None = None,
         trading_date: date | None = None,
+        market_data: MarketDataSnapshot | None = None,
     ) -> AnalysisResult:
         ...
 
 
 class NonTradingDayError(ValueError):
+    pass
+
+
+class EmptyWatchlistError(ValueError):
     pass
 
 
@@ -41,13 +43,15 @@ class BriefingService:
         analysis_repository: AnalysisRepository,
         watchlist_repository: WatchlistRepository,
         analysis_provider: BriefingAnalysisProvider,
-        notifier: AlertNotifier,
+        market_data_provider: MarketDataProvider,
+        trading_calendar: TradingCalendar,
     ) -> None:
         self.briefing_repository = briefing_repository
         self.analysis_repository = analysis_repository
         self.watchlist_repository = watchlist_repository
         self.analysis_provider = analysis_provider
-        self.notifier = notifier
+        self.market_data_provider = market_data_provider
+        self.trading_calendar = trading_calendar
 
     def generate(
         self,
@@ -56,35 +60,36 @@ class BriefingService:
         exchange: str,
         briefing_type: BriefingType,
         trading_date: date,
+        force: bool = False,
     ) -> InvestmentBriefing:
         normalized_exchange = exchange.strip().upper()
-        if not is_trading_day(normalized_exchange, trading_date):
+        if self.trading_calendar.session_on(normalized_exchange, trading_date) is None:
             raise NonTradingDayError("SKIPPED_NON_TRADING_DAY")
 
-        briefing, created = self.briefing_repository.create_or_get(
+        watchlist = self._watchlist_for_exchange(user_id, normalized_exchange)
+        if not watchlist:
+            raise EmptyWatchlistError("SKIPPED_EMPTY_WATCHLIST")
+
+        briefing, acquired = self.briefing_repository.acquire_generation(
             user_id=user_id,
             exchange=normalized_exchange,
             briefing_type=briefing_type.value,
             trading_date=trading_date,
+            force=force,
         )
-        if not created and briefing.status in {"COMPLETED", "PARTIAL"}:
-            self._deliver(briefing)
+        if not acquired:
             return briefing
-        if not created:
-            briefing.version += 1
 
-        watchlist = self._watchlist_for_exchange(user_id, normalized_exchange)
-        if not watchlist:
-            return self.briefing_repository.finalize(
-                briefing,
-                status="SKIPPED_EMPTY_WATCHLIST",
-                summary="브리핑 대상 관심종목이 없습니다.",
-                resolved_symbols=[],
-                failure_count=0,
-            )
+        resolved_symbols = [item.symbol for item in watchlist]
+        self.briefing_repository.replace_scope(
+            briefing.id,
+            source_type="WATCHLIST",
+            source_value=normalized_exchange,
+            resolved_symbols=resolved_symbols,
+        )
 
         prepared_items: list[dict] = []
-        failures = 0
+        failures: list[dict] = []
         for item in watchlist:
             try:
                 prepared_items.append(
@@ -95,12 +100,11 @@ class BriefingService:
                         trading_date=trading_date,
                     )
                 )
-            except Exception:
-                failures += 1
+            except Exception as exc:
+                failures.append(self._failure(item.symbol, exc))
                 logger.exception("Briefing analysis failed user=%s symbol=%s", user_id, item.symbol)
 
         ranked = self._rank(prepared_items)
-        self.briefing_repository.replace_items(briefing, ranked)
 
         if not ranked:
             status = "FAILED"
@@ -108,16 +112,15 @@ class BriefingService:
             status = "PARTIAL"
         else:
             status = "COMPLETED"
-        summary = self._render_summary(briefing_type, ranked, failures)
-        briefing = self.briefing_repository.finalize(
+        summary = self._render_summary(briefing_type, ranked, len(failures))
+        briefing = self.briefing_repository.complete_generation(
             briefing,
+            items=ranked,
+            failures=failures,
             status=status,
             summary=summary,
-            resolved_symbols=[item.symbol for item in watchlist],
-            failure_count=failures,
+            resolved_symbols=resolved_symbols,
         )
-        if ranked:
-            self._deliver(briefing)
         return briefing
 
     def list_for_user(
@@ -137,6 +140,12 @@ class BriefingService:
     def get_deliveries(self, briefing_id: int):
         return self.briefing_repository.list_deliveries(briefing_id)
 
+    def get_scopes(self, briefing_id: int):
+        return self.briefing_repository.list_scopes(briefing_id)
+
+    def get_failures(self, briefing_id: int):
+        return self.briefing_repository.list_failures(briefing_id)
+
     def _analyze_item(
         self,
         *,
@@ -145,11 +154,15 @@ class BriefingService:
         briefing_type: BriefingType,
         trading_date: date,
     ) -> dict:
+        market_data = None
+        if briefing_type is BriefingType.POST_MARKET:
+            market_data = self.market_data_provider.fetch_close(item.symbol, trading_date)
         current = self.analysis_provider.analyze_and_store(
             item.symbol,
             user_id=user_id,
             briefing_type=briefing_type.value,
             trading_date=trading_date,
+            market_data=market_data,
         )
         previous = None
         if briefing_type is BriefingType.POST_MARKET:
@@ -232,18 +245,12 @@ class BriefingService:
         changed = sum(1 for item in items if item["judgment_changed"])
         return f"{label}: {len(items)}개 종목 분석, 판단 변경 {changed}개, 실패 {failures}개"
 
-    def _deliver(self, briefing: InvestmentBriefing) -> None:
-        delivery = self.briefing_repository.ensure_delivery(briefing.id, "KAKAO")
-        if delivery.status == "SENT":
-            return
-        try:
-            self.notifier.send_alert(briefing.summary)
-        except Exception as exc:
-            logger.exception("Briefing delivery failed briefing_id=%s", briefing.id)
-            self.briefing_repository.record_delivery_attempt(
-                delivery,
-                status="FAILED",
-                error=str(exc),
-            )
-            return
-        self.briefing_repository.record_delivery_attempt(delivery, status="SENT")
+    @staticmethod
+    def _failure(symbol: str, exc: Exception) -> dict:
+        return {
+            "symbol": symbol,
+            "error_code": type(exc).__name__,
+            "message": str(exc) or type(exc).__name__,
+            "retryable": isinstance(exc, (ClosingDataNotReadyError, MarketDataError)),
+            "attempt_count": 1,
+        }

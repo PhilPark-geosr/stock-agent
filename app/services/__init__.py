@@ -5,7 +5,7 @@ from app.services.services import (
     AnalysisService,
     ScheduledBatchResult,
 )
-from app.services.briefings import BriefingService, NonTradingDayError
+from app.services.briefings import BriefingService, EmptyWatchlistError, NonTradingDayError
 
 __all__ = [
     "AnalysisProvider",
@@ -13,4 +13,5 @@ __all__ = [
     "ScheduledBatchResult",
     "BriefingService",
     "NonTradingDayError",
+    "EmptyWatchlistError",
 ]

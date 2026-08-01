@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from app.api.deps import (
     get_alert_condition_repository,
     get_analysis_service,
+    get_briefing_delivery_service,
     get_briefing_service,
     get_current_user_id,
     get_rule_validation_agent,
@@ -39,9 +40,11 @@ from app.services.scheduler import run_scheduled_batch
 from app.services import (
     AnalysisProvider,
     BriefingService,
+    EmptyWatchlistError,
     NonTradingDayError,
     ScheduledBatchResult,
 )
+from app.services.briefing_delivery import BriefingDeliveryService
 
 
 router = APIRouter()
@@ -159,6 +162,7 @@ def create_alert_condition(
     payload: CustomAlertConditionCreate,
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
     validation_agent: RuleValidationAgent = Depends(get_rule_validation_agent),
+    user_id: str = Depends(get_current_user_id),
 ):
     try:
         validation = validation_agent.validate(
@@ -178,6 +182,7 @@ def create_alert_condition(
         )
 
     return alert_condition_repository.save_validated(
+        user_id=user_id,
         symbol=payload.symbol,
         user_rule=payload.user_rule,
         validation=validation,
@@ -187,16 +192,18 @@ def create_alert_condition(
 @router.get("/alert-conditions", response_model=list[CustomAlertConditionRead])
 def list_alert_conditions(
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
+    user_id: str = Depends(get_current_user_id),
 ):
-    return alert_condition_repository.list()
+    return alert_condition_repository.list(user_id)
 
 
 @router.delete("/alert-conditions/{condition_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_alert_condition(
     condition_id: int,
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
+    user_id: str = Depends(get_current_user_id),
 ):
-    if not alert_condition_repository.delete(condition_id):
+    if not alert_condition_repository.delete(condition_id, user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alert condition not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -289,6 +296,7 @@ def get_analysis_by_id(
 def run_briefing(
     payload: BriefingRunRequest,
     briefing_service: BriefingService = Depends(get_briefing_service),
+    delivery_service: BriefingDeliveryService = Depends(get_briefing_delivery_service),
     user_id: str = Depends(get_current_user_id),
 ):
     try:
@@ -297,11 +305,14 @@ def run_briefing(
             exchange=payload.exchange,
             briefing_type=payload.briefing_type,
             trading_date=payload.trading_date,
+            force=payload.force,
         )
-    except NonTradingDayError as exc:
+    except (NonTradingDayError, EmptyWatchlistError) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if briefing.status in {"COMPLETED", "PARTIAL"}:
+        delivery_service.deliver(briefing)
     return _briefing_detail(briefing_service, briefing)
 
 
@@ -343,4 +354,6 @@ def _briefing_detail(briefing_service: BriefingService, briefing) -> dict:
         "failure_count": briefing.failure_count,
         "items": briefing_service.get_items(briefing.id),
         "deliveries": briefing_service.get_deliveries(briefing.id),
+        "scopes": briefing_service.get_scopes(briefing.id),
+        "failures": briefing_service.get_failures(briefing.id),
     }

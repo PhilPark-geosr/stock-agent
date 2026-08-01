@@ -60,6 +60,16 @@ Open `http://127.0.0.1:8000` in your browser.
 Until an authentication provider is connected, user-scoped endpoints read the development
 identity from the `X-User-Id` header and default to `default`.
 
+The background scheduler also checks KRX and US exchange sessions. It creates
+pre-market briefings during the configured lead window and post-market summaries
+after the calendar-confirmed close. Exchange holidays, early closes, and daylight
+saving transitions come from `exchange-calendars`. Passing `"force": true` to the
+internal run endpoint regenerates the existing daily briefing as a new version.
+
+Security search, `@` mentions, and `#` filter resolution belong to the separate
+security-search context (PR #23). The briefing feature stores only the already
+resolved scope snapshot and does not parse search text.
+
 ## Tests
 
 ```bash

@@ -47,9 +47,14 @@ class AnalysisResult(Base):
 
 class CustomAlertConditionRecord(Base):
     __tablename__ = "custom_alert_conditions"
-    __table_args__ = (UniqueConstraint("symbol", "user_rule", name="uq_custom_alert_conditions_symbol_rule"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "symbol", "user_rule", name="uq_custom_alert_conditions_user_symbol_rule"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[str] = mapped_column(String(64), default="default", nullable=False, index=True)
     symbol: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     user_rule: Mapped[str] = mapped_column(Text, nullable=False)
@@ -82,9 +87,25 @@ class InvestmentBriefing(Base):
     status: Mapped[str] = mapped_column(String(24), default="GENERATING", nullable=False, index=True)
     summary: Mapped[str] = mapped_column(Text, default="", nullable=False)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    generation_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     resolved_symbols: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class BriefingScope(Base):
+    __tablename__ = "briefing_scopes"
+    __table_args__ = (
+        UniqueConstraint("briefing_id", "source_type", name="uq_briefing_scope_source"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    briefing_id: Mapped[int] = mapped_column(
+        ForeignKey("investment_briefings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_value: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    resolved_symbols: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
 
 
 class BriefingItem(Base):
@@ -127,3 +148,21 @@ class BriefingDelivery(Base):
     attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class BriefingFailure(Base):
+    __tablename__ = "briefing_failures"
+    __table_args__ = (
+        UniqueConstraint("briefing_id", "symbol", name="uq_briefing_failure_symbol"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    briefing_id: Mapped[int] = mapped_column(
+        ForeignKey("investment_briefings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    symbol: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    error_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    retryable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
