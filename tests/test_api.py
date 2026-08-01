@@ -51,6 +51,21 @@ def test_custom_alert_condition_is_validated_and_saved(client, rule_validation_a
     assert [item["id"] for item in listed.json()] == [body["id"]]
 
 
+def test_custom_alert_conditions_are_isolated_by_user(client):
+    payload = {
+        "symbol": "005930.KS",
+        "user_rule": "Notify me when NVDA rises by 5 percent.",
+    }
+    alice = client.post("/alert-conditions", headers={"X-User-Id": "alice"}, json=payload)
+    bob = client.post("/alert-conditions", headers={"X-User-Id": "bob"}, json=payload)
+
+    assert alice.status_code == 201
+    assert bob.status_code == 201
+    assert alice.json()["id"] != bob.json()["id"]
+    assert len(client.get("/alert-conditions", headers={"X-User-Id": "alice"}).json()) == 1
+    assert len(client.get("/alert-conditions", headers={"X-User-Id": "bob"}).json()) == 1
+
+
 def test_custom_alert_condition_rejection_returns_rewrite_guidance(client, rule_validation_agent):
     rule_validation_agent.result = RuleValidationResult(
         is_valid=False,

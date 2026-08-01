@@ -7,6 +7,9 @@ from fastapi.templating import Jinja2Templates
 from app.api.deps import (
     get_alert_condition_repository,
     get_analysis_service,
+    get_briefing_delivery_service,
+    get_briefing_service,
+    get_current_user_id,
     get_rule_validation_agent,
     get_watchlist_repository,
 )
@@ -25,13 +28,23 @@ from app.interfaces.rule_validation import RuleValidationAgent, RuleValidationEr
 from app.schemas import (
     AnalysisResultHistoryItem,
     AnalysisResultRead,
+    BriefingDetailRead,
+    BriefingRead,
+    BriefingRunRequest,
     CustomAlertConditionCreate,
     CustomAlertConditionRead,
     WatchlistCreate,
     WatchlistItemRead,
 )
 from app.services.scheduler import run_scheduled_batch
-from app.services import AnalysisProvider, ScheduledBatchResult
+from app.services import (
+    AnalysisProvider,
+    BriefingService,
+    EmptyWatchlistError,
+    NonTradingDayError,
+    ScheduledBatchResult,
+)
+from app.services.briefing_delivery import BriefingDeliveryService
 
 
 router = APIRouter()
@@ -115,21 +128,26 @@ def kakao_callback(
 def add_watchlist_item(
     payload: WatchlistCreate,
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
+    user_id: str = Depends(get_current_user_id),
 ):
-    return watchlist_repository.add(payload.symbol)
+    return watchlist_repository.add(payload.symbol, user_id)
 
 
 @router.get("/watchlist", response_model=list[WatchlistItemRead])
-def list_watchlist_items(watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository)):
-    return watchlist_repository.list()
+def list_watchlist_items(
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
+    user_id: str = Depends(get_current_user_id),
+):
+    return watchlist_repository.list(user_id)
 
 
 @router.delete("/watchlist/{symbol}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_watchlist_item(
     symbol: str,
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
+    user_id: str = Depends(get_current_user_id),
 ):
-    deleted = watchlist_repository.delete(symbol)
+    deleted = watchlist_repository.delete(symbol, user_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="watchlist item not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -144,6 +162,7 @@ def create_alert_condition(
     payload: CustomAlertConditionCreate,
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
     validation_agent: RuleValidationAgent = Depends(get_rule_validation_agent),
+    user_id: str = Depends(get_current_user_id),
 ):
     try:
         validation = validation_agent.validate(
@@ -163,6 +182,7 @@ def create_alert_condition(
         )
 
     return alert_condition_repository.save_validated(
+        user_id=user_id,
         symbol=payload.symbol,
         user_rule=payload.user_rule,
         validation=validation,
@@ -172,16 +192,18 @@ def create_alert_condition(
 @router.get("/alert-conditions", response_model=list[CustomAlertConditionRead])
 def list_alert_conditions(
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
+    user_id: str = Depends(get_current_user_id),
 ):
-    return alert_condition_repository.list()
+    return alert_condition_repository.list(user_id)
 
 
 @router.delete("/alert-conditions/{condition_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_alert_condition(
     condition_id: int,
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
+    user_id: str = Depends(get_current_user_id),
 ):
-    if not alert_condition_repository.delete(condition_id):
+    if not alert_condition_repository.delete(condition_id, user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alert condition not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -203,9 +225,12 @@ def list_analysis_history(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
+    user_id: str = Depends(get_current_user_id),
 ):
     try:
-        return analysis_service.list_analysis_history(symbol, limit=limit, offset=offset)
+        return analysis_service.list_analysis_history(
+            symbol, user_id=user_id, limit=limit, offset=offset
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -218,9 +243,10 @@ def list_analysis_history(
 def run_manual_analysis(
     symbol: str,
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
+    user_id: str = Depends(get_current_user_id),
 ):
     try:
-        result = analysis_service.run_manual_analysis(symbol)
+        result = analysis_service.run_manual_analysis(symbol, user_id=user_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except MarketDataError as exc:
@@ -236,9 +262,10 @@ def run_manual_analysis(
 def get_latest_analysis(
     symbol: str,
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
+    user_id: str = Depends(get_current_user_id),
 ):
     try:
-        result = analysis_service.get_latest_analysis(symbol)
+        result = analysis_service.get_latest_analysis(symbol, user_id=user_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except MarketDataError as exc:
@@ -255,10 +282,78 @@ def get_analysis_by_id(
     symbol: str,
     result_id: int,
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
+    user_id: str = Depends(get_current_user_id),
 ):
     try:
-        return analysis_service.get_analysis_by_id(symbol, result_id)
+        return analysis_service.get_analysis_by_id(symbol, result_id, user_id=user_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/internal/briefings/run", response_model=BriefingDetailRead)
+def run_briefing(
+    payload: BriefingRunRequest,
+    briefing_service: BriefingService = Depends(get_briefing_service),
+    delivery_service: BriefingDeliveryService = Depends(get_briefing_delivery_service),
+    user_id: str = Depends(get_current_user_id),
+):
+    try:
+        briefing = briefing_service.generate(
+            user_id=user_id,
+            exchange=payload.exchange,
+            briefing_type=payload.briefing_type,
+            trading_date=payload.trading_date,
+            force=payload.force,
+        )
+    except (NonTradingDayError, EmptyWatchlistError) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if briefing.status in {"COMPLETED", "PARTIAL"}:
+        delivery_service.deliver(briefing)
+    return _briefing_detail(briefing_service, briefing)
+
+
+@router.get("/users/me/briefings", response_model=list[BriefingRead])
+def list_my_briefings(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    briefing_service: BriefingService = Depends(get_briefing_service),
+    user_id: str = Depends(get_current_user_id),
+):
+    return briefing_service.list_for_user(user_id, limit=limit, offset=offset)
+
+
+@router.get("/users/me/briefings/{briefing_id}", response_model=BriefingDetailRead)
+def get_my_briefing(
+    briefing_id: int,
+    briefing_service: BriefingService = Depends(get_briefing_service),
+    user_id: str = Depends(get_current_user_id),
+):
+    try:
+        briefing = briefing_service.get_for_user(briefing_id, user_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _briefing_detail(briefing_service, briefing)
+
+
+def _briefing_detail(briefing_service: BriefingService, briefing) -> dict:
+    return {
+        "id": briefing.id,
+        "user_id": briefing.user_id,
+        "briefing_type": briefing.briefing_type,
+        "exchange": briefing.exchange,
+        "trading_date": briefing.trading_date,
+        "status": briefing.status,
+        "summary": briefing.summary,
+        "generated_at": briefing.generated_at,
+        "version": briefing.version,
+        "resolved_symbols": briefing.resolved_symbols,
+        "failure_count": briefing.failure_count,
+        "items": briefing_service.get_items(briefing.id),
+        "deliveries": briefing_service.get_deliveries(briefing.id),
+        "scopes": briefing_service.get_scopes(briefing.id),
+        "failures": briefing_service.get_failures(briefing.id),
+    }

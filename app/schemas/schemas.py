@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.domain.briefings import BriefingType
 
 
 class OHLCVRecord(BaseModel):
@@ -59,6 +61,7 @@ class AnalysisResult(BaseModel):
     analysis_time: datetime
     data_time: datetime
     verdict: str
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     summary: str
     key_reasons: List[str]
     risk_factors: List[str]
@@ -186,3 +189,91 @@ class AnalysisResultHistoryItem(BaseModel):
     summary: str
     should_alert: bool
     triggered_alerts: List[str]
+
+
+class BriefingRunRequest(BaseModel):
+    briefing_type: BriefingType = Field(alias="type")
+    exchange: str = Field(min_length=2, max_length=24)
+    trading_date: date
+    force: bool = False
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @field_validator("exchange")
+    @classmethod
+    def normalize_exchange(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class BriefingRead(BaseModel):
+    id: int
+    user_id: str
+    briefing_type: str = Field(serialization_alias="type")
+    exchange: str
+    trading_date: date
+    status: str
+    summary: str
+    generated_at: datetime | None
+    version: int
+    resolved_symbols: list[str]
+    failure_count: int
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class BriefingItemRead(BaseModel):
+    id: int
+    symbol: str
+    rank: int
+    current_analysis_id: int
+    previous_analysis_id: int | None
+    current_judgment: str
+    previous_judgment: str | None
+    judgment_changed: bool
+    comparison_status: str
+    judgment_distance: int
+    confidence: float | None
+    data_timestamp: datetime | None
+    summary: str
+    change_reason: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BriefingDeliveryRead(BaseModel):
+    id: int
+    channel: str
+    status: str
+    attempt_count: int
+    sent_at: datetime | None
+    last_error: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BriefingScopeRead(BaseModel):
+    id: int
+    source_type: str
+    source_value: str | None
+    resolved_symbols: list[str]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BriefingFailureRead(BaseModel):
+    id: int
+    symbol: str
+    error_code: str
+    message: str
+    retryable: bool
+    attempt_count: int
+    resolved_at: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BriefingDetailRead(BriefingRead):
+    items: list[BriefingItemRead] = Field(default_factory=list)
+    deliveries: list[BriefingDeliveryRead] = Field(default_factory=list)
+    scopes: list[BriefingScopeRead] = Field(default_factory=list)
+    failures: list[BriefingFailureRead] = Field(default_factory=list)

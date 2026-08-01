@@ -53,6 +53,22 @@ Open `http://127.0.0.1:8000` in your browser.
 - `GET /alert-conditions` - list saved custom alert conditions
 - `DELETE /alert-conditions/{condition_id}` - remove a custom alert condition
 - `GET /stocks/{symbol}/analysis/latest` - get the latest analysis, creating one when no cached result exists
+- `POST /internal/briefings/run` - generate a pre-market or post-market briefing
+- `GET /users/me/briefings` - list the current user's briefings
+- `GET /users/me/briefings/{id}` - get a briefing with ranked items and delivery state
+
+Until an authentication provider is connected, user-scoped endpoints read the development
+identity from the `X-User-Id` header and default to `default`.
+
+The background scheduler also checks KRX and US exchange sessions. It creates
+pre-market briefings during the configured lead window and post-market summaries
+after the calendar-confirmed close. Exchange holidays, early closes, and daylight
+saving transitions come from `exchange-calendars`. Passing `"force": true` to the
+internal run endpoint regenerates the existing daily briefing as a new version.
+
+Security search, `@` mentions, and `#` filter resolution belong to the separate
+security-search context (PR #23). The briefing feature stores only the already
+resolved scope snapshot and does not parse search text.
 
 ## Tests
 

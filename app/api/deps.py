@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import Depends
+from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.container import (
     build_analysis_service,
+    build_briefing_delivery_service,
+    build_briefing_service,
     get_alert_notifier,
     get_analysis_agent,
     get_market_data_provider,
@@ -22,7 +24,8 @@ from app.interfaces.repositories import (
 )
 from app.interfaces.rule_validation import RuleValidationAgent
 from app.repositories import AlertConditionRepository, WatchlistRepository
-from app.services import AnalysisProvider
+from app.services import AnalysisProvider, BriefingService
+from app.services.briefing_delivery import BriefingDeliveryService
 
 
 def get_rule_validation_agent() -> RuleValidationAgent:
@@ -41,6 +44,32 @@ def get_analysis_service(
         agent=agent,
         alert_notifier=alert_notifier,
     )
+
+
+def get_current_user_id(
+    user_id: str = Header(default="default", alias="X-User-Id"),
+) -> str:
+    normalized = user_id.strip()
+    if not normalized or len(normalized) > 64:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid X-User-Id header",
+        )
+    return normalized
+
+
+def get_briefing_service(
+    db: Session = Depends(get_db),
+    analysis_service: AnalysisProvider = Depends(get_analysis_service),
+) -> BriefingService:
+    return build_briefing_service(db, analysis_service=analysis_service)
+
+
+def get_briefing_delivery_service(
+    db: Session = Depends(get_db),
+    alert_notifier: AlertNotifier = Depends(get_alert_notifier),
+) -> BriefingDeliveryService:
+    return build_briefing_delivery_service(db, notifier=alert_notifier)
 
 
 def get_watchlist_repository(db: Session = Depends(get_db)) -> WatchlistRepositoryInterface:
