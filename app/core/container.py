@@ -21,8 +21,9 @@ from app.repositories import (
     AlertConditionRepository as SqlAlchemyAlertConditionRepository,
     AnalysisRepository as SqlAlchemyAnalysisRepository,
     WatchlistRepository as SqlAlchemyWatchlistRepository,
+    BriefingRepository as SqlAlchemyBriefingRepository,
 )
-from app.services import AnalysisService
+from app.services import AnalysisService, BriefingService
 
 
 def build_alert_window_checker() -> Callable[[datetime], bool]:
@@ -56,6 +57,23 @@ def build_analysis_service(
         alert_notifier=alert_notifier or get_alert_notifier(),
         alert_window_checker=alert_window_checker or build_alert_window_checker(),
         now_provider=now_provider,
+    )
+
+
+def build_briefing_service(
+    db: Session,
+    *,
+    analysis_service: AnalysisService | None = None,
+) -> BriefingService:
+    provider = analysis_service or build_analysis_service(db)
+    analysis_repository = SqlAlchemyAnalysisRepository(db)
+    watchlist_repository = SqlAlchemyWatchlistRepository(db)
+    return BriefingService(
+        briefing_repository=SqlAlchemyBriefingRepository(db),
+        analysis_repository=analysis_repository,
+        watchlist_repository=watchlist_repository,
+        analysis_provider=provider,
+        notifier=provider.alert_notifier,
     )
 
 

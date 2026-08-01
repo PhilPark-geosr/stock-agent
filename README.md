@@ -53,6 +53,12 @@ Open `http://127.0.0.1:8000` in your browser.
 - `GET /alert-conditions` - list saved custom alert conditions
 - `DELETE /alert-conditions/{condition_id}` - remove a custom alert condition
 - `GET /stocks/{symbol}/analysis/latest` - get the latest analysis, creating one when no cached result exists
+- `POST /internal/briefings/run` - generate a pre-market or post-market briefing
+- `GET /users/me/briefings` - list the current user's briefings
+- `GET /users/me/briefings/{id}` - get a briefing with ranked items and delivery state
+
+Until an authentication provider is connected, user-scoped endpoints read the development
+identity from the `X-User-Id` header and default to `default`.
 
 ## Tests
 

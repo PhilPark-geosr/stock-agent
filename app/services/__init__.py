@@ -5,9 +5,12 @@ from app.services.services import (
     AnalysisService,
     ScheduledBatchResult,
 )
+from app.services.briefings import BriefingService, NonTradingDayError
 
 __all__ = [
     "AnalysisProvider",
     "AnalysisService",
     "ScheduledBatchResult",
+    "BriefingService",
+    "NonTradingDayError",
 ]

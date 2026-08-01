@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Callable, Protocol
 
 logger = logging.getLogger(__name__)
 
 from app.domain.alert_conditions import DEFAULT_SYSTEM_ALERT_CONDITIONS
 from app.domain.models import AnalysisResult as StoredAnalysisResult
+from app.domain.briefings import normalize_judgment
 from app.domain.symbols import normalize_symbol
 from app.interfaces.analysis import AnalysisAgent
 from app.interfaces.market_data import MarketDataProvider
@@ -26,22 +27,25 @@ class ScheduledBatchResult:
 
 
 class AnalysisProvider(Protocol):
-    def get_latest_analysis(self, symbol: str) -> StoredAnalysisResult:
+    def get_latest_analysis(self, symbol: str, user_id: str = "default") -> StoredAnalysisResult:
         """Return the latest stored analysis, creating one when none exists."""
 
-    def run_manual_analysis(self, symbol: str) -> StoredAnalysisResult:
+    def run_manual_analysis(self, symbol: str, user_id: str = "default") -> StoredAnalysisResult:
         """Create and store a fresh analysis for one symbol."""
 
     def list_analysis_history(
         self,
         symbol: str,
         *,
+        user_id: str = "default",
         limit: int = 20,
         offset: int = 0,
     ) -> list[StoredAnalysisResult]:
         """Return stored analysis rows newest first."""
 
-    def get_analysis_by_id(self, symbol: str, result_id: int) -> StoredAnalysisResult:
+    def get_analysis_by_id(
+        self, symbol: str, result_id: int, user_id: str = "default"
+    ) -> StoredAnalysisResult:
         """Return one stored analysis row by id."""
 
     def run_scheduled_batch(self, *, now: datetime | None = None) -> ScheduledBatchResult:
@@ -70,26 +74,26 @@ class AnalysisService:
         self.alert_window_checker = alert_window_checker
         self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
 
-    def get_latest_analysis(self, symbol: str) -> StoredAnalysisResult:
+    def get_latest_analysis(self, symbol: str, user_id: str = "default") -> StoredAnalysisResult:
         normalized_symbol = normalize_symbol(symbol)
         if not normalized_symbol:
             raise ValueError("symbol is required")
 
-        latest = self.analysis_repository.get_latest(normalized_symbol)
+        latest = self.analysis_repository.get_latest(normalized_symbol, user_id)
         if latest is not None:
             self._try_send_pending_alert(latest)
             return latest
 
-        stored = self.analyze_and_store(normalized_symbol)
+        stored = self.analyze_and_store(normalized_symbol, user_id=user_id)
         self._try_send_pending_alert(stored)
         return stored
 
-    def run_manual_analysis(self, symbol: str) -> StoredAnalysisResult:
+    def run_manual_analysis(self, symbol: str, user_id: str = "default") -> StoredAnalysisResult:
         normalized_symbol = normalize_symbol(symbol)
         if not normalized_symbol:
             raise ValueError("symbol is required")
 
-        stored = self.analyze_and_store(normalized_symbol)
+        stored = self.analyze_and_store(normalized_symbol, user_id=user_id)
         self._try_send_pending_alert(stored)
         return stored
 
@@ -97,6 +101,7 @@ class AnalysisService:
         self,
         symbol: str,
         *,
+        user_id: str = "default",
         limit: int = 20,
         offset: int = 0,
     ) -> list[StoredAnalysisResult]:
@@ -109,20 +114,30 @@ class AnalysisService:
             raise ValueError("offset must be >= 0")
         return self.analysis_repository.list_by_symbol(
             normalized_symbol,
+            user_id=user_id,
             limit=limit,
             offset=offset,
         )
 
-    def get_analysis_by_id(self, symbol: str, result_id: int) -> StoredAnalysisResult:
+    def get_analysis_by_id(
+        self, symbol: str, result_id: int, user_id: str = "default"
+    ) -> StoredAnalysisResult:
         normalized_symbol = normalize_symbol(symbol)
         if not normalized_symbol:
             raise ValueError("symbol is required")
-        stored = self.analysis_repository.get_by_id(normalized_symbol, result_id)
+        stored = self.analysis_repository.get_by_id(normalized_symbol, result_id, user_id)
         if stored is None:
             raise LookupError("analysis result not found")
         return stored
 
-    def analyze_and_store(self, symbol: str) -> StoredAnalysisResult:
+    def analyze_and_store(
+        self,
+        symbol: str,
+        *,
+        user_id: str = "default",
+        briefing_type: str | None = None,
+        trading_date: date | None = None,
+    ) -> StoredAnalysisResult:
         normalized_symbol = normalize_symbol(symbol)
         if not normalized_symbol:
             raise ValueError("symbol is required")
@@ -141,7 +156,11 @@ class AnalysisService:
         raw_result = model_to_dict(agent_result)
 
         return self.analysis_repository.save(
+            user_id=user_id,
             symbol=agent_result.symbol,
+            normalized_judgment=normalize_judgment(agent_result.verdict).value,
+            briefing_type=briefing_type,
+            trading_date=trading_date,
             data_timestamp=agent_result.data_time,
             overall_judgment=agent_result.verdict,
             summary=agent_result.summary,

@@ -45,6 +45,25 @@ def init_db() -> None:
                 connection.execute(
                     text("ALTER TABLE analysis_results ADD COLUMN alert_sent_at DATETIME")
                 )
+        additions = {
+            "user_id": "VARCHAR(64) NOT NULL DEFAULT 'default'",
+            "normalized_judgment": "VARCHAR(24) NOT NULL DEFAULT 'UNKNOWN'",
+            "briefing_type": "VARCHAR(24)",
+            "trading_date": "DATE",
+        }
+        for column_name, definition in additions.items():
+            if column_name not in columns:
+                with engine.begin() as connection:
+                    connection.execute(
+                        text(f"ALTER TABLE analysis_results ADD COLUMN {column_name} {definition}")
+                    )
+    if inspector.has_table("watchlist_items"):
+        columns = {column["name"] for column in inspector.get_columns("watchlist_items")}
+        if "user_id" not in columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE watchlist_items ADD COLUMN user_id VARCHAR(64) NOT NULL DEFAULT 'default'")
+                )
     if inspector.has_table("custom_alert_conditions"):
         columns = {column["name"] for column in inspector.get_columns("custom_alert_conditions")}
         if "normalized_rule" not in columns:

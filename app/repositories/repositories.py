@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -19,34 +19,45 @@ class WatchlistRepository(WatchlistRepositoryInterface):
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list(self) -> list[WatchlistItem]:
-        return list(self.db.scalars(select(WatchlistItem).order_by(WatchlistItem.symbol)))
+    def list(self, user_id: str = "default") -> list[WatchlistItem]:
+        return list(
+            self.db.scalars(
+                select(WatchlistItem)
+                .where(WatchlistItem.user_id == user_id)
+                .order_by(WatchlistItem.symbol)
+            )
+        )
 
-    def get(self, symbol: str) -> WatchlistItem | None:
+    def get(self, symbol: str, user_id: str = "default") -> WatchlistItem | None:
         normalized = normalize_symbol(symbol)
-        return self.db.scalar(select(WatchlistItem).where(WatchlistItem.symbol == normalized))
+        return self.db.scalar(
+            select(WatchlistItem).where(
+                WatchlistItem.user_id == user_id,
+                WatchlistItem.symbol == normalized,
+            )
+        )
 
-    def add(self, symbol: str) -> WatchlistItem:
+    def add(self, symbol: str, user_id: str = "default") -> WatchlistItem:
         normalized = normalize_symbol(symbol)
-        existing = self.get(normalized)
+        existing = self.get(normalized, user_id)
         if existing is not None:
             return existing
 
-        item = WatchlistItem(symbol=normalized)
+        item = WatchlistItem(user_id=user_id, symbol=normalized)
         self.db.add(item)
         try:
             self.db.commit()
         except IntegrityError:
             self.db.rollback()
-            existing = self.get(normalized)
+            existing = self.get(normalized, user_id)
             if existing is not None:
                 return existing
             raise
         self.db.refresh(item)
         return item
 
-    def delete(self, symbol: str) -> bool:
-        item = self.get(symbol)
+    def delete(self, symbol: str, user_id: str = "default") -> bool:
+        item = self.get(symbol, user_id)
         if item is None:
             return False
 
@@ -138,11 +149,11 @@ class AnalysisRepository(AnalysisRepositoryInterface):
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get_latest(self, symbol: str) -> AnalysisResult | None:
+    def get_latest(self, symbol: str, user_id: str = "default") -> AnalysisResult | None:
         normalized = normalize_symbol(symbol)
         statement = (
             select(AnalysisResult)
-            .where(AnalysisResult.symbol == normalized)
+            .where(AnalysisResult.user_id == user_id, AnalysisResult.symbol == normalized)
             .order_by(AnalysisResult.analyzed_at.desc(), AnalysisResult.id.desc())
             .limit(1)
         )
@@ -152,24 +163,27 @@ class AnalysisRepository(AnalysisRepositoryInterface):
         self,
         symbol: str,
         *,
+        user_id: str = "default",
         limit: int = 20,
         offset: int = 0,
     ) -> list[AnalysisResult]:
         normalized = normalize_symbol(symbol)
         statement = (
             select(AnalysisResult)
-            .where(AnalysisResult.symbol == normalized)
+            .where(AnalysisResult.user_id == user_id, AnalysisResult.symbol == normalized)
             .order_by(AnalysisResult.analyzed_at.desc(), AnalysisResult.id.desc())
             .offset(offset)
             .limit(limit)
         )
         return list(self.db.scalars(statement))
 
-    def get_by_id(self, symbol: str, result_id: int) -> AnalysisResult | None:
+    def get_by_id(
+        self, symbol: str, result_id: int, user_id: str = "default"
+    ) -> AnalysisResult | None:
         normalized = normalize_symbol(symbol)
         statement = (
             select(AnalysisResult)
-            .where(AnalysisResult.symbol == normalized)
+            .where(AnalysisResult.user_id == user_id, AnalysisResult.symbol == normalized)
             .where(AnalysisResult.id == result_id)
         )
         return self.db.scalar(statement)
@@ -178,8 +192,12 @@ class AnalysisRepository(AnalysisRepositoryInterface):
         self,
         *,
         symbol: str,
+        user_id: str = "default",
         overall_judgment: str,
         summary: str,
+        normalized_judgment: str = "UNKNOWN",
+        briefing_type: str | None = None,
+        trading_date: date | None = None,
         data_timestamp: datetime | None = None,
         key_reasons: list[str] | None = None,
         risk_factors: list[str] | None = None,
@@ -190,7 +208,11 @@ class AnalysisRepository(AnalysisRepositoryInterface):
         raw_result: dict[str, Any] | None = None,
     ) -> AnalysisResult:
         result = AnalysisResult(
+            user_id=user_id,
             symbol=normalize_symbol(symbol),
+            normalized_judgment=normalized_judgment,
+            briefing_type=briefing_type,
+            trading_date=trading_date,
             data_timestamp=data_timestamp,
             overall_judgment=overall_judgment,
             summary=summary,
@@ -234,3 +256,27 @@ class AnalysisRepository(AnalysisRepositoryInterface):
         normalized = normalize_symbol(symbol)
         rows = self.db.scalars(select(AnalysisResult).where(AnalysisResult.symbol == normalized))
         return sum(1 for _ in rows)
+
+    def get_previous_comparable(
+        self,
+        *,
+        user_id: str,
+        symbol: str,
+        before_id: int | None = None,
+        briefing_type: str | None = None,
+        trading_date: date | None = None,
+    ) -> AnalysisResult | None:
+        normalized = normalize_symbol(symbol)
+        statement = select(AnalysisResult).where(
+            AnalysisResult.user_id == user_id,
+            AnalysisResult.symbol == normalized,
+            AnalysisResult.normalized_judgment != "UNKNOWN",
+        )
+        if before_id is not None:
+            statement = statement.where(AnalysisResult.id < before_id)
+        if briefing_type is not None:
+            statement = statement.where(AnalysisResult.briefing_type == briefing_type)
+        if trading_date is not None:
+            statement = statement.where(AnalysisResult.trading_date == trading_date)
+        statement = statement.order_by(AnalysisResult.analyzed_at.desc(), AnalysisResult.id.desc()).limit(1)
+        return self.db.scalar(statement)
