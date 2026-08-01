@@ -112,6 +112,21 @@ def test_latest_analysis_returns_cached_result_without_external_calls(
     assert alert_notifier.messages == []
 
 
+def test_manual_analysis_always_creates_fresh_result(
+    client, db_session, market_data, agent, alert_notifier
+):
+    first = client.post("/stocks/005930.KS/analysis")
+    second = client.post("/stocks/005930.KS/analysis")
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] != second.json()["id"]
+    assert market_data.calls == ["005930.KS", "005930.KS"]
+    assert [call.symbol for call in agent.calls] == ["005930.KS", "005930.KS"]
+    assert AnalysisRepository(db_session).count_by_symbol("005930.KS") == 2
+    assert alert_notifier.messages == []
+
+
 def test_latest_analysis_sends_pending_alert_for_cached_result(client, db_session, alert_notifier):
     AnalysisRepository(db_session).save(
         symbol="005930.KS",
