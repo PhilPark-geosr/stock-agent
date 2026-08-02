@@ -144,18 +144,18 @@ flowchart LR
 2. 외부 신원 제공자가 투자자의 신원을 확인한다.
 3. 주식 분석 서비스가 확인된 외부 신원으로 이미 가입된 사용자 계정을 찾는다.
 4. 기존 연결이 있으면 해당 사용자 계정으로 로그인한다.
-5. 연결이 없으면 사용자 계정과 외부 로그인 신원 연결을 함께 생성한다.
+5. 연결이 없으면 로그인 신원을 소유한 사용자 계정을 생성한다.
 6. 사용자가 인증된 서비스 사용을 시작한다.
 
 #### 사후 조건
 
-- 성공 시 하나의 외부 로그인 신원은 정확히 하나의 사용자 계정과 연결된다.
-- 최초 로그인이라면 사용자 계정과 외부 로그인 신원 연결이 함께 존재한다.
+- 성공 시 하나의 로그인 신원은 정확히 하나의 사용자 계정에 속한다.
+- 최초 로그인이라면 사용자 계정과 그 계정이 소유한 로그인 신원이 함께 존재한다.
 - 로그인만으로 알림 연결을 생성하지 않는다.
 
 ### 2. 로그인 도메인 모델
 
-로그인 유스케이스에서 핵심 도메인 객체는 `UserAccount`와 `ExternalIdentity`다. 외부 신원 제공자는 외부 행위자이며, 세션·컨트롤러·저장소는 도메인 객체가 아니므로 이 모델에 포함하지 않는다.
+로그인 유스케이스에서 핵심 도메인 객체는 `UserAccount`와 `LoginIdentity`다. 로그인 제공자는 외부 행위자이며, 세션·컨트롤러·저장소는 도메인 객체가 아니므로 이 모델에 포함하지 않는다.
 
 ```mermaid
 classDiagram
@@ -163,12 +163,12 @@ classDiagram
         +UserAccountId id
     }
 
-    class ExternalIdentity {
+    class LoginIdentity {
         +provider
         +providerSubjectId
     }
 
-    UserAccount "1" *-- "1..*" ExternalIdentity : 로그인 신원
+    UserAccount "1" *-- "1" LoginIdentity : 소유
 ```
 
 #### 도메인 객체의 책임
@@ -176,14 +176,15 @@ classDiagram
 | 도메인 객체 | 책임 |
 | --- | --- |
 | `UserAccount` | 서비스 내부의 데이터 소유권과 계정 생명주기를 대표 |
-| `ExternalIdentity` | 외부 제공자가 확인한 신원을 사용자 계정과 연결 |
+| `LoginIdentity` | 로그인 제공자가 확인한 사람을 사용자 계정과 대응시키는 값 |
 
 #### 불변식
 
 - 같은 제공자의 같은 외부 사용자 식별자는 둘 이상의 `UserAccount`에 연결될 수 없다.
 - 서비스 데이터는 외부 제공자의 식별자가 아니라 내부 `UserAccountId`를 소유권 기준으로 사용한다.
-- 외부 로그인 신원 연결이 이미 존재하면 새 `UserAccount`를 생성하지 않는다.
-- 최초 로그인에서 `UserAccount`와 `ExternalIdentity`는 둘 다 생성되거나 둘 다 생성되지 않아야 한다.
+- 로그인 신원이 이미 사용자 계정에 속해 있으면 새 `UserAccount`를 생성하지 않는다.
+- 최초 로그인에서 `UserAccount`와 `LoginIdentity`는 둘 다 생성되거나 둘 다 생성되지 않아야 한다.
+- `LoginIdentity`는 독립된 식별자나 생명주기를 갖지 않으며 `UserAccount`가 소유한다.
 - 로그인 성공이 `NotificationConnection` 생성을 의미하지 않는다.
 
 ### 3. 시스템 시퀀스 다이어그램
@@ -201,10 +202,10 @@ sequenceDiagram
     Note over Investor,Provider: 제공자 고유의 신원 확인 절차
     Provider-->>System: 신원 확인 결과
 
-    alt 기존 외부 로그인 신원 연결이 있음
+    alt 기존 로그인 신원을 소유한 계정이 있음
         Note over System: 연결된 사용자 계정으로 인증
     else 최초 로그인
-        Note over System: UserAccount와 ExternalIdentity를 함께 생성
+        Note over System: LoginIdentity를 소유한 UserAccount 생성
     end
 
     System-->>Investor: 로그인 완료
@@ -274,7 +275,7 @@ flowchart LR
 
 ```mermaid
 classDiagram
-    UserAccount "1" --> "*" ExternalIdentity
+    UserAccount "1" *-- "1" LoginIdentity
     UserAccount "1" --> "*" NotificationConnection
     UserAccount "1" --> "*" WatchlistSubscription
     WatchlistSubscription "*" --> "1" Stock
@@ -288,7 +289,7 @@ classDiagram
 | 개념 | 책임 |
 | --- | --- |
 | `UserAccount` | 서비스 내부 계정과 데이터 소유권의 기준 |
-| `ExternalIdentity` | 사용자 계정과 외부 로그인 신원의 연결 |
+| `LoginIdentity` | 사용자 계정이 소유하는 단일 로그인 신원 값 |
 | `NotificationConnection` | 사용자와 카카오톡 알림 권한의 연결 상태 |
 | `WatchlistSubscription` | 사용자가 특정 종목을 관찰한다는 관계 |
 | `StockAnalysis` | 사용자와 무관한 공유 종목 분석 |
