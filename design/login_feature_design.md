@@ -223,7 +223,7 @@ sequenceDiagram
 
 | 객체 | 책임 |
 | --- | --- |
-| `LoginService` | 외부 로그인을 요청하고 로그인 신원에 해당하는 사용자 계정을 조회하거나 생성하는 흐름 조정 |
+| `LoginService` | 외부 로그인을 요청하고 로그인 신원에 해당하는 사용자 계정을 조회하거나 생성한 뒤 인증 상태가 성립하도록 흐름 조정 |
 | `ExternalLogin` | 제공자별 로그인 절차를 숨기고 검증된 `LoginIdentity` 반환 |
 | `UserAccountRepository` | 로그인 신원으로 사용자 계정 조회 및 사용자 계정 저장 |
 | `UserAccount` | 유효한 `LoginIdentity`를 소유한 새 계정 생성 규칙 보장 |
@@ -255,10 +255,12 @@ sequenceDiagram
         Login->>Accounts: save(userAccount)
     end
 
-    Login-->>Investor: UserAccount
+    Login-->>Investor: 로그인 완료
 ```
 
 이 시퀀스의 `ExternalLogin.login()`은 카카오 OAuth의 실제 동기 호출 형태를 확정한 것이 아니라, 제공자별 인증 과정 전체를 하나의 추상적인 메시지로 표현한 것이다.
+
+`login()`은 사용자 계정을 조회하거나 생성하는 것만으로 끝나지 않는다. 이후 요청에서도 해당 사용자 계정으로 인증되었다고 판단할 수 있는 상태가 성립해야 로그인 완료로 본다. 현재 초안은 이 상태를 추상화하며, 구체적인 세션·토큰 방식과 반환 모델은 후속 설계에서 결정한다.
 
 ### 설계 클래스 다이어그램 초안
 
@@ -268,7 +270,7 @@ classDiagram
 
     class LoginService {
         <<control>>
-        +login() UserAccount
+        +login()
     }
 
     class ExternalLogin {
@@ -304,7 +306,7 @@ classDiagram
 ### 현재 초안에서 의도적으로 보류한 사항
 
 - 카카오 로그인 시작과 콜백을 나누는 실제 프로토콜 흐름
-- 로그인 완료 후 세션 또는 토큰을 발급하는 방식
+- 로그인 완료 후 인증 상태를 유지하는 세션 또는 토큰 방식
 - 외부 로그인 실패, 취소와 재시도 처리
 - `UserAccount` 대신 별도의 응답 모델을 외부에 반환할지 여부
 
