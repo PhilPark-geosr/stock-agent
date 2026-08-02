@@ -213,6 +213,101 @@ sequenceDiagram
 
 로그인 제공자와 개인 투자자 사이의 실제 인증 방법은 시스템 경계 밖에 있으므로 SSD에서 하나의 추상적인 절차로 숨긴다. 카카오의 리다이렉트, 동의 화면과 콜백 같은 상호작용은 OOD의 제공자별 로그인 설계에서 다룬다.
 
+## OOD: 추상 로그인 설계 초안
+
+첫 번째 OOD 초안은 외부 로그인 프로토콜의 세부 단계를 확정하지 않는다. `LoginService.login()`이라는 하나의 공개 연산으로 로그인 유스케이스를 표현하고, `ExternalLogin`이 제공자별 인증 과정을 숨긴 뒤 검증된 `LoginIdentity`를 반환한다고 본다.
+
+`LoginService`가 유스케이스의 제어 책임을 가진다. 별도의 `AuthenticateAccount` 제어 객체는 만들지 않는다.
+
+### 책임 배정
+
+| 객체 | 책임 |
+| --- | --- |
+| `LoginService` | 외부 로그인을 요청하고 로그인 신원에 해당하는 사용자 계정을 조회하거나 생성하는 흐름 조정 |
+| `ExternalLogin` | 제공자별 로그인 절차를 숨기고 검증된 `LoginIdentity` 반환 |
+| `UserAccountRepository` | 로그인 신원으로 사용자 계정 조회 및 사용자 계정 저장 |
+| `UserAccount` | 유효한 `LoginIdentity`를 소유한 새 계정 생성 규칙 보장 |
+| `LoginIdentity` | 로그인 제공자와 제공자 사용자 식별자의 조합 표현 |
+
+저장소는 기존 계정 조회와 생성된 계정 저장만 담당한다. 새 계정을 만드는 책임은 생성 규칙을 소유한 `UserAccount`에 두고, `LoginService`가 두 객체의 협력을 조정한다.
+
+### 로그인 시퀀스 다이어그램 초안
+
+```mermaid
+sequenceDiagram
+    actor Investor as 개인 투자자
+    participant Login as LoginService
+    participant External as ExternalLogin
+    participant Accounts as UserAccountRepository
+    participant Account as UserAccount
+
+    Investor->>Login: login()
+    Login->>External: login()
+    External-->>Login: LoginIdentity
+    Login->>Accounts: findByLoginIdentity(loginIdentity)
+
+    alt 기존 사용자 계정이 있음
+        Accounts-->>Login: UserAccount
+    else 기존 사용자 계정이 없음
+        Accounts-->>Login: 없음
+        Login->>Account: register(loginIdentity)
+        Account-->>Login: new UserAccount
+        Login->>Accounts: save(userAccount)
+    end
+
+    Login-->>Investor: UserAccount
+```
+
+이 시퀀스의 `ExternalLogin.login()`은 카카오 OAuth의 실제 동기 호출 형태를 확정한 것이 아니라, 제공자별 인증 과정 전체를 하나의 추상적인 메시지로 표현한 것이다.
+
+### 설계 클래스 다이어그램 초안
+
+```mermaid
+classDiagram
+    direction LR
+
+    class LoginService {
+        <<control>>
+        +login() UserAccount
+    }
+
+    class ExternalLogin {
+        <<interface>>
+        +login() LoginIdentity
+    }
+
+    class UserAccountRepository {
+        <<interface>>
+        +findByLoginIdentity(loginIdentity) UserAccount?
+        +save(userAccount)
+    }
+
+    class UserAccount {
+        <<entity>>
+        +UserAccountId id
+        +register(loginIdentity) UserAccount
+    }
+
+    class LoginIdentity {
+        <<value object>>
+        +provider
+        +providerSubjectId
+    }
+
+    LoginService --> ExternalLogin : 로그인 요청
+    LoginService --> UserAccountRepository : 조회·저장
+    LoginService ..> UserAccount : 생성 요청
+    ExternalLogin ..> LoginIdentity : 반환
+    UserAccount "1" *-- "1" LoginIdentity : 소유
+```
+
+### 현재 초안에서 의도적으로 보류한 사항
+
+- 카카오 로그인 시작과 콜백을 나누는 실제 프로토콜 흐름
+- 로그인 완료 후 세션 또는 토큰을 발급하는 방식
+- 외부 로그인 실패, 취소와 재시도 처리
+- `UserAccount` 대신 별도의 응답 모델을 외부에 반환할지 여부
+
 ### 로그인과 알림 연결 분리
 
 서비스 로그인과 카카오톡 알림 연결은 별개의 상태다.
