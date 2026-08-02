@@ -194,13 +194,12 @@ SSD에서는 주식 분석 서비스를 하나의 블랙박스로 취급한다. 
 sequenceDiagram
     actor Investor as 개인 투자자
     participant System as 주식 분석 서비스
-    participant IdentityProvider as 외부 신원 제공자
+    participant Provider as 로그인 제공자
 
     Investor->>System: 로그인 요청
-    System->>IdentityProvider: 신원 확인 요청
-    IdentityProvider-->>Investor: 신원 확인 요구
-    Investor->>IdentityProvider: 신원 증명
-    IdentityProvider-->>System: 확인된 외부 로그인 신원
+    System->>Provider: 신원 확인 위임
+    Note over Investor,Provider: 제공자 고유의 신원 확인 절차
+    Provider-->>System: 신원 확인 결과
 
     alt 기존 외부 로그인 신원 연결이 있음
         Note over System: 연결된 내부 사용자로 인증
@@ -210,6 +209,8 @@ sequenceDiagram
 
     System-->>Investor: 로그인 완료
 ```
+
+로그인 제공자와 개인 투자자 사이의 실제 인증 방법은 시스템 경계 밖에 있으므로 SSD에서 하나의 추상적인 절차로 숨긴다. 카카오의 리다이렉트, 동의 화면과 콜백 같은 상호작용은 OOD의 제공자별 로그인 설계에서 다룬다.
 
 ## OOD: 카카오 로그인 구현 설계
 
