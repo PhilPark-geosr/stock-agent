@@ -134,8 +134,8 @@ flowchart LR
         LOGIN(["서비스에 로그인"])
     end
 
-    INVESTOR --> LOGIN
-    IDP --> LOGIN
+    INVESTOR --- LOGIN
+    IDP --- LOGIN
 ```
 
 #### 기본 흐름
