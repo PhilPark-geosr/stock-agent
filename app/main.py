@@ -10,7 +10,6 @@ from app.core.database import SessionLocal, init_db
 from app.core.scheduler_config import scheduler_settings
 from app.core.scheduler_runtime import start_scheduler
 from app.core.settings import load_environment
-from app.integrations.kakao_auth import kakao_settings
 
 logging.basicConfig(level=logging.INFO)
 
@@ -21,11 +20,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_db()
-    token = kakao_settings()["access_token"]
-    if token:
-        logger.info("Kakao alerts enabled (access token loaded)")
-    else:
-        logger.warning("Kakao alerts disabled: KAKAO_ACCESS_TOKEN missing in .env")
+    logger.info("Runtime user alert delivery disabled for the initial multi-user release")
 
     scheduler_task: asyncio.Task[None] | None = None
     stop_event: asyncio.Event | None = None
