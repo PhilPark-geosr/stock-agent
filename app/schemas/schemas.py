@@ -173,6 +173,7 @@ class AnalysisResultRead(BaseModel):
     triggered_alerts: List[str]
     alert_reason: Optional[str]
     raw_result: Optional[Dict[str, Any]]
+    shared_safe: bool
 
 
 class AnalysisResultHistoryItem(BaseModel):
@@ -188,3 +189,4 @@ class AnalysisResultHistoryItem(BaseModel):
     summary: str
     should_alert: bool
     triggered_alerts: List[str]
+    shared_safe: bool

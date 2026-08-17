@@ -212,6 +212,7 @@ class AnalysisRepository(AnalysisRepositoryInterface):
         statement = (
             select(AnalysisResult)
             .where(AnalysisResult.symbol == normalized)
+            .where(AnalysisResult.shared_safe.is_(True))
             .order_by(AnalysisResult.analyzed_at.desc(), AnalysisResult.id.desc())
             .limit(1)
         )
@@ -228,6 +229,7 @@ class AnalysisRepository(AnalysisRepositoryInterface):
         statement = (
             select(AnalysisResult)
             .where(AnalysisResult.symbol == normalized)
+            .where(AnalysisResult.shared_safe.is_(True))
             .order_by(AnalysisResult.analyzed_at.desc(), AnalysisResult.id.desc())
             .offset(offset)
             .limit(limit)
@@ -240,6 +242,7 @@ class AnalysisRepository(AnalysisRepositoryInterface):
             select(AnalysisResult)
             .where(AnalysisResult.symbol == normalized)
             .where(AnalysisResult.id == result_id)
+            .where(AnalysisResult.shared_safe.is_(True))
         )
         return self.db.scalar(statement)
 
@@ -270,6 +273,7 @@ class AnalysisRepository(AnalysisRepositoryInterface):
             triggered_alerts=triggered_alerts or [],
             alert_reason=alert_reason,
             raw_result=raw_result,
+            shared_safe=True,
         )
         self.db.add(result)
         self.db.commit()
@@ -301,5 +305,10 @@ class AnalysisRepository(AnalysisRepositoryInterface):
 
     def count_by_symbol(self, symbol: str) -> int:
         normalized = normalize_symbol(symbol)
-        rows = self.db.scalars(select(AnalysisResult).where(AnalysisResult.symbol == normalized))
+        rows = self.db.scalars(
+            select(AnalysisResult).where(
+                AnalysisResult.symbol == normalized,
+                AnalysisResult.shared_safe.is_(True),
+            )
+        )
         return sum(1 for _ in rows)

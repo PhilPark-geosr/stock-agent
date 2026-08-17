@@ -18,7 +18,6 @@ from app.interfaces.analysis import AnalysisAgent
 from app.interfaces.market_data import MarketDataProvider
 from app.interfaces.notifications import AlertNotifier
 from app.repositories import (
-    AlertConditionRepository as SqlAlchemyAlertConditionRepository,
     AnalysisRepository as SqlAlchemyAnalysisRepository,
     WatchlistRepository as SqlAlchemyWatchlistRepository,
 )
@@ -49,12 +48,9 @@ def build_analysis_service(
 ) -> AnalysisService:
     return AnalysisService(
         analysis_repository=SqlAlchemyAnalysisRepository(db),
-        alert_condition_repository=SqlAlchemyAlertConditionRepository(db),
         watchlist_repository=SqlAlchemyWatchlistRepository(db),
         market_data_provider=market_data_provider or get_market_data_provider(),
         agent=agent or get_analysis_agent(),
-        alert_notifier=alert_notifier or get_alert_notifier(),
-        alert_window_checker=alert_window_checker or build_alert_window_checker(),
         now_provider=now_provider,
     )
 

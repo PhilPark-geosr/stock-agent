@@ -49,6 +49,19 @@ templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / 
 bearer = HTTPBearer(auto_error=False)
 
 
+def _require_active_subscription(
+    account: UserAccount,
+    symbol: str,
+    watchlist_repository: WatchlistRepository,
+) -> None:
+    try:
+        stock_symbol = StockSymbol.of(symbol)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if watchlist_repository.get(account.id, stock_symbol) is None:
+        raise HTTPException(status_code=404, detail="active watchlist subscription not found")
+
+
 class LoginAttemptCreate(BaseModel):
     verifier_challenge: str
 
@@ -278,8 +291,11 @@ def list_analysis_history(
     symbol: str,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    account: UserAccount = Depends(get_current_account),
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
+    _require_active_subscription(account, symbol, watchlist_repository)
     try:
         return analysis_service.list_analysis_history(symbol, limit=limit, offset=offset)
     except ValueError as exc:
@@ -293,8 +309,11 @@ def list_analysis_history(
 )
 def run_manual_analysis(
     symbol: str,
+    account: UserAccount = Depends(get_current_account),
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
+    _require_active_subscription(account, symbol, watchlist_repository)
     try:
         result = analysis_service.run_manual_analysis(symbol)
     except ValueError as exc:
@@ -311,8 +330,11 @@ def run_manual_analysis(
 @router.get("/stocks/{symbol}/analysis/latest", response_model=AnalysisResultRead)
 def get_latest_analysis(
     symbol: str,
+    account: UserAccount = Depends(get_current_account),
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
+    _require_active_subscription(account, symbol, watchlist_repository)
     try:
         result = analysis_service.get_latest_analysis(symbol)
     except ValueError as exc:
@@ -330,8 +352,11 @@ def get_latest_analysis(
 def get_analysis_by_id(
     symbol: str,
     result_id: int,
+    account: UserAccount = Depends(get_current_account),
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
+    _require_active_subscription(account, symbol, watchlist_repository)
     try:
         return analysis_service.get_analysis_by_id(symbol, result_id)
     except ValueError as exc:

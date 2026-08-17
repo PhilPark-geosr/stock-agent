@@ -12,8 +12,7 @@ from app.domain.models import AnalysisResult as StoredAnalysisResult
 from app.domain.symbols import normalize_symbol
 from app.interfaces.analysis import AnalysisAgent
 from app.interfaces.market_data import MarketDataProvider
-from app.interfaces.notifications import AlertNotifier, AlertNotifyError
-from app.interfaces.repositories import AlertConditionRepository, AnalysisRepository, WatchlistRepository
+from app.interfaces.repositories import AnalysisRepository, WatchlistRepository
 from app.schemas import model_to_dict
 
 
@@ -53,21 +52,15 @@ class AnalysisService:
         self,
         *,
         analysis_repository: AnalysisRepository,
-        alert_condition_repository: AlertConditionRepository,
         watchlist_repository: WatchlistRepository,
         market_data_provider: MarketDataProvider,
         agent: AnalysisAgent,
-        alert_notifier: AlertNotifier,
-        alert_window_checker: Callable[[datetime], bool],
         now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.analysis_repository = analysis_repository
-        self.alert_condition_repository = alert_condition_repository
         self.watchlist_repository = watchlist_repository
         self.market_data_provider = market_data_provider
         self.agent = agent
-        self.alert_notifier = alert_notifier
-        self.alert_window_checker = alert_window_checker
         self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
 
     def get_latest_analysis(self, symbol: str) -> StoredAnalysisResult:
@@ -77,21 +70,16 @@ class AnalysisService:
 
         latest = self.analysis_repository.get_latest(normalized_symbol)
         if latest is not None:
-            self._try_send_pending_alert(latest)
             return latest
 
-        stored = self.analyze_and_store(normalized_symbol)
-        self._try_send_pending_alert(stored)
-        return stored
+        return self.analyze_and_store(normalized_symbol)
 
     def run_manual_analysis(self, symbol: str) -> StoredAnalysisResult:
         normalized_symbol = normalize_symbol(symbol)
         if not normalized_symbol:
             raise ValueError("symbol is required")
 
-        stored = self.analyze_and_store(normalized_symbol)
-        self._try_send_pending_alert(stored)
-        return stored
+        return self.analyze_and_store(normalized_symbol)
 
     def list_analysis_history(
         self,
@@ -128,13 +116,11 @@ class AnalysisService:
             raise ValueError("symbol is required")
 
         market_data = self.market_data_provider.fetch(normalized_symbol)
-        custom_conditions = self.alert_condition_repository.list_enabled_for_symbol(normalized_symbol)
-        alert_conditions = [*DEFAULT_SYSTEM_ALERT_CONDITIONS, *custom_conditions]
+        alert_conditions = list(DEFAULT_SYSTEM_ALERT_CONDITIONS)
         logger.info(
-            "AnalysisService prepared analysis symbol=%s system_conditions=%d custom_conditions=%d",
+            "AnalysisService prepared shared analysis symbol=%s system_conditions=%d",
             normalized_symbol,
             len(DEFAULT_SYSTEM_ALERT_CONDITIONS),
-            len(custom_conditions),
         )
         agent_result = self.agent.analyze(market_data, alert_conditions)
         agent_result = self._validate_alert_decision(agent_result, alert_conditions)
@@ -187,7 +173,6 @@ class AnalysisService:
         for symbol in symbols:
             try:
                 stored = self.analyze_and_store(symbol.value)
-                self._try_send_pending_alert(stored, now=now)
                 analyzed.append(symbol.value)
             except Exception:
                 logger.exception("Scheduled analysis failed for %s", symbol.value)
@@ -198,36 +183,3 @@ class AnalysisService:
             symbols_analyzed=analyzed,
             symbols_failed=failed,
         )
-
-    def _should_send_alert(self, stored: StoredAnalysisResult, *, now: datetime | None = None) -> bool:
-        if not stored.should_alert or not stored.alert_reason:
-            return False
-
-        current = now or self.now_provider()
-        if not self.alert_window_checker(current):
-            return False
-
-        if self.analysis_repository.has_sent_alert_for_conditions(
-            stored.symbol,
-            stored.triggered_alerts or [],
-        ):
-            return False
-
-        return True
-
-    def _try_send_pending_alert(
-        self,
-        stored: StoredAnalysisResult,
-        *,
-        now: datetime | None = None,
-    ) -> None:
-        if not self._should_send_alert(stored, now=now):
-            return
-        try:
-            self.alert_notifier.send_alert(stored.alert_reason)
-        except AlertNotifyError:
-            raise
-        except Exception as exc:
-            logger.exception("Alert notification failed for %s", stored.symbol)
-            raise AlertNotifyError(str(exc)) from exc
-        self.analysis_repository.mark_alert_sent(stored)

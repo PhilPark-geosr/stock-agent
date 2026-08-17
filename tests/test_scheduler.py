@@ -103,7 +103,7 @@ def test_run_scheduled_batch_empty_watchlist(db_session, alert_notifier):
     assert result.skipped_reason == "empty_watchlist"
 
 
-def test_alert_sent_only_once_for_same_conditions(db_session, market_data, alert_notifier):
+def test_scheduler_does_not_send_user_notifications(db_session, market_data, alert_notifier):
     subscribe(db_session)
     from app.schemas import AnalysisResult
 
@@ -142,7 +142,7 @@ def test_alert_sent_only_once_for_same_conditions(db_session, market_data, alert
         now=ALERT_WINDOW_UTC,
     )
 
-    assert alert_notifier.messages == ["급등 알림"]
+    assert alert_notifier.messages == []
 
 
 def test_scheduler_run_endpoint(client, db_session, market_data, agent, alert_notifier):

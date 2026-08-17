@@ -94,6 +94,7 @@ class AnalysisResult(Base):
     alert_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     raw_result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    shared_safe: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class CustomAlertConditionRecord(Base):

@@ -33,13 +33,17 @@ def test_known_legacy_database_is_stamped_without_losing_rows(tmp_path: Path) ->
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT symbol FROM watchlist_items WHERE id=1")) == "AAPL"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0005_alert_condition_ownership"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0006_shared_analysis"
         columns = {column["name"] for column in inspect(engine).get_columns("watchlist_items")}
         assert {"user_account_id", "ended_at"} <= columns
         condition_columns = {
             column["name"] for column in inspect(engine).get_columns("custom_alert_conditions")
         }
         assert {"watchlist_subscription_id", "ended_at"} <= condition_columns
+        analysis_columns = {
+            column["name"] for column in inspect(engine).get_columns("analysis_results")
+        }
+        assert "shared_safe" in analysis_columns
     assert "user_accounts" in inspect(engine).get_table_names()
 
 
