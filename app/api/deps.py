@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.container import (
@@ -28,6 +29,11 @@ from app.application.login import LoginService
 from app.integrations.kakao_auth import KakaoAuthError, KakaoExternalLogin, build_authorize_url, kakao_settings
 from app.repositories.auth import SqlAlchemyAuthSessionRepository, SqlAlchemyLoginAttemptRepository
 from app.repositories.auth import SqlAlchemyUserAccountRepository
+from app.application.auth_sessions import AttemptUnauthorized
+from app.domain.auth import UserAccount
+
+
+bearer = HTTPBearer(auto_error=False)
 
 
 def get_rule_validation_agent() -> RuleValidationAgent:
@@ -58,6 +64,18 @@ def get_alert_condition_repository(db: Session = Depends(get_db)) -> AlertCondit
 
 def get_session_service(db: Session = Depends(get_db)) -> SessionService:
     return SessionService(SqlAlchemyAuthSessionRepository(db))
+
+
+def get_current_account(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    sessions: SessionService = Depends(get_session_service),
+) -> UserAccount:
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+    try:
+        return sessions.authenticate(credentials.credentials)
+    except AttemptUnauthorized as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
 def get_login_attempt_service(

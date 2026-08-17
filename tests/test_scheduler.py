@@ -8,10 +8,20 @@ import pytest
 from app.core.trading_window import is_market_hours
 from app.core.container import build_analysis_service
 from app.repositories import AnalysisRepository, WatchlistRepository
+from app.domain.auth import LoginIdentity, UserAccount
+from app.domain.symbols import StockSymbol
+from app.repositories.auth import SqlAlchemyUserAccountRepository
 from app.services.scheduler import run_scheduled_batch
 from tests.conftest import ALERT_WINDOW_UTC, FakeAnalysisAgent, FakeMarketDataProvider
 
 KST = ZoneInfo("Asia/Seoul")
+
+
+def subscribe(db_session, symbol: str = "005930.KS"):
+    account = SqlAlchemyUserAccountRepository(db_session).save_or_get_existing(
+        UserAccount.register(LoginIdentity("kakao", "scheduler-user"))
+    )
+    return WatchlistRepository(db_session).add(account.id, StockSymbol.of(symbol))
 
 
 @pytest.mark.parametrize(
@@ -30,7 +40,7 @@ def test_is_market_hours_boundaries(local_hour: int, expected: bool):
 
 
 def test_run_scheduled_batch_accumulates_results(db_session, market_data, agent, alert_notifier):
-    WatchlistRepository(db_session).add("005930.KS")
+    subscribe(db_session)
     service = build_analysis_service(
         db_session,
         market_data_provider=market_data,
@@ -59,7 +69,7 @@ def test_run_scheduled_batch_accumulates_results(db_session, market_data, agent,
 
 
 def test_run_scheduled_batch_skips_outside_market_hours(db_session, market_data, agent, alert_notifier):
-    WatchlistRepository(db_session).add("005930.KS")
+    subscribe(db_session)
     service = build_analysis_service(
         db_session,
         market_data_provider=market_data,
@@ -94,7 +104,7 @@ def test_run_scheduled_batch_empty_watchlist(db_session, alert_notifier):
 
 
 def test_alert_sent_only_once_for_same_conditions(db_session, market_data, alert_notifier):
-    WatchlistRepository(db_session).add("005930.KS")
+    subscribe(db_session)
     from app.schemas import AnalysisResult
 
     agent = FakeAnalysisAgent(
@@ -138,7 +148,7 @@ def test_alert_sent_only_once_for_same_conditions(db_session, market_data, alert
 def test_scheduler_run_endpoint(client, db_session, market_data, agent, alert_notifier):
     from unittest.mock import patch
 
-    WatchlistRepository(db_session).add("005930.KS")
+    subscribe(db_session)
     service = build_analysis_service(
         db_session,
         market_data_provider=market_data,

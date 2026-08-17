@@ -16,6 +16,7 @@ from app.core.container import build_analysis_service
 from app.core.database import Base, get_db
 from app.domain import models  # noqa: F401
 from app.domain.alert_conditions import RuleValidationResult
+from app.domain.auth import LoginIdentity, UserAccount
 from app.interfaces.analysis import AnalysisAgentError
 from app.interfaces.market_data import MarketDataError
 from app.main import app
@@ -153,13 +154,17 @@ def client(
             now_provider=lambda: ALERT_WINDOW_UTC,
         )
 
+    current_account = UserAccount.register(LoginIdentity("kakao", "test-user"))
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_market_data_provider] = lambda: market_data
     app.dependency_overrides[get_analysis_agent] = lambda: agent
     app.dependency_overrides[get_alert_notifier] = lambda: alert_notifier
     from app.api.routes import get_rule_validation_agent
+    from app.api.deps import get_current_account
 
     app.dependency_overrides[get_rule_validation_agent] = lambda: rule_validation_agent
+    app.dependency_overrides[get_current_account] = lambda: current_account
     app.dependency_overrides[get_analysis_service] = override_analysis_service
     test_client = TestClient(app)
     try:

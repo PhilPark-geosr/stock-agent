@@ -178,20 +178,20 @@ class AnalysisService:
         )
 
     def run_scheduled_batch(self, *, now: datetime | None = None) -> ScheduledBatchResult:
-        items = self.watchlist_repository.list()
-        if not items:
+        symbols = self.watchlist_repository.list_distinct_active_symbols()
+        if not symbols:
             return ScheduledBatchResult(ran=True, skipped_reason="empty_watchlist")
 
         analyzed: list[str] = []
         failed: list[str] = []
-        for item in items:
+        for symbol in symbols:
             try:
-                stored = self.analyze_and_store(item.symbol)
+                stored = self.analyze_and_store(symbol.value)
                 self._try_send_pending_alert(stored, now=now)
-                analyzed.append(item.symbol)
+                analyzed.append(symbol.value)
             except Exception:
-                logger.exception("Scheduled analysis failed for %s", item.symbol)
-                failed.append(item.symbol)
+                logger.exception("Scheduled analysis failed for %s", symbol.value)
+                failed.append(symbol.value)
 
         return ScheduledBatchResult(
             ran=True,

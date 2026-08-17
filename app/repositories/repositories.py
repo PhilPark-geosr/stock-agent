@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from typing import Any
 
@@ -6,8 +8,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.domain.alert_conditions import CustomAlertCondition, RuleValidationResult
-from app.domain.models import AnalysisResult, CustomAlertConditionRecord, WatchlistItem
-from app.domain.symbols import normalize_symbol
+from app.domain.models import AnalysisResult, CustomAlertConditionRecord, WatchlistSubscription
+from app.domain.symbols import StockSymbol, normalize_symbol
 from app.interfaces.repositories import (
     AlertConditionRepository as AlertConditionRepositoryInterface,
     AnalysisRepository as AnalysisRepositoryInterface,
@@ -19,40 +21,61 @@ class WatchlistRepository(WatchlistRepositoryInterface):
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list(self) -> list[WatchlistItem]:
-        return list(self.db.scalars(select(WatchlistItem).order_by(WatchlistItem.symbol)))
+    def list(self, owner_id: str) -> list[WatchlistSubscription]:
+        statement = (
+            select(WatchlistSubscription)
+            .where(WatchlistSubscription.owner_id == owner_id)
+            .where(WatchlistSubscription.ended_at.is_(None))
+            .order_by(WatchlistSubscription.symbol)
+        )
+        return list(self.db.scalars(statement))
 
-    def get(self, symbol: str) -> WatchlistItem | None:
-        normalized = normalize_symbol(symbol)
-        return self.db.scalar(select(WatchlistItem).where(WatchlistItem.symbol == normalized))
+    def get(self, owner_id: str, symbol: StockSymbol) -> WatchlistSubscription | None:
+        return self.db.scalar(
+            select(WatchlistSubscription).where(
+                WatchlistSubscription.owner_id == owner_id,
+                WatchlistSubscription.symbol == symbol.value,
+                WatchlistSubscription.ended_at.is_(None),
+            )
+        )
 
-    def add(self, symbol: str) -> WatchlistItem:
-        normalized = normalize_symbol(symbol)
-        existing = self.get(normalized)
+    def add(self, owner_id: str, symbol: StockSymbol) -> WatchlistSubscription:
+        existing = self.get(owner_id, symbol)
         if existing is not None:
             return existing
 
-        item = WatchlistItem(symbol=normalized)
+        item = WatchlistSubscription(owner_id=owner_id, symbol=symbol.value)
         self.db.add(item)
         try:
             self.db.commit()
         except IntegrityError:
             self.db.rollback()
-            existing = self.get(normalized)
+            existing = self.get(owner_id, symbol)
             if existing is not None:
                 return existing
             raise
         self.db.refresh(item)
         return item
 
-    def delete(self, symbol: str) -> bool:
-        item = self.get(symbol)
+    def delete(self, owner_id: str, symbol: StockSymbol) -> bool:
+        item = self.get(owner_id, symbol)
         if item is None:
             return False
 
-        self.db.delete(item)
+        item.end(datetime.now(timezone.utc))
+        self.db.add(item)
         self.db.commit()
         return True
+
+    def list_distinct_active_symbols(self) -> list[StockSymbol]:
+        statement = (
+            select(WatchlistSubscription.symbol)
+            .where(WatchlistSubscription.owner_id.is_not(None))
+            .where(WatchlistSubscription.ended_at.is_(None))
+            .distinct()
+            .order_by(WatchlistSubscription.symbol)
+        )
+        return [StockSymbol.of(symbol) for symbol in self.db.scalars(statement)]
 
 
 class AlertConditionRepository(AlertConditionRepositoryInterface):

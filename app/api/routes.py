@@ -15,10 +15,13 @@ from app.api.deps import (
     get_login_attempt_service,
     get_session_service,
     get_login_service,
+    get_current_account,
 )
 from app.application.auth_sessions import AttemptExpired, AttemptNotFound, AttemptPending, AttemptUnauthorized, LoginAttemptService, SessionService
 from app.application.login import LoginService
 from app.domain.auth import ExternalLoginCredential
+from app.domain.auth import UserAccount
+from app.domain.symbols import StockSymbol
 from app.application.custom_rule_agent import CustomRuleAgentError
 from app.integrations.kakao_auth import (
     KakaoAuthError,
@@ -175,22 +178,27 @@ def kakao_callback(
 @router.post("/watchlist", response_model=WatchlistItemRead, status_code=status.HTTP_201_CREATED)
 def add_watchlist_item(
     payload: WatchlistCreate,
+    account: UserAccount = Depends(get_current_account),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
 ):
-    return watchlist_repository.add(payload.symbol)
+    return watchlist_repository.add(account.id, StockSymbol.of(payload.symbol))
 
 
 @router.get("/watchlist", response_model=list[WatchlistItemRead])
-def list_watchlist_items(watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository)):
-    return watchlist_repository.list()
+def list_watchlist_items(
+    account: UserAccount = Depends(get_current_account),
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
+):
+    return watchlist_repository.list(account.id)
 
 
 @router.delete("/watchlist/{symbol}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_watchlist_item(
     symbol: str,
+    account: UserAccount = Depends(get_current_account),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
 ):
-    deleted = watchlist_repository.delete(symbol)
+    deleted = watchlist_repository.delete(account.id, StockSymbol.of(symbol))
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="watchlist item not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,13 +12,38 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class WatchlistItem(Base):
+class WatchlistSubscription(Base):
     __tablename__ = "watchlist_items"
-    __table_args__ = (UniqueConstraint("symbol", name="uq_watchlist_items_symbol"),)
+    __table_args__ = (
+        Index(
+            "uq_watchlist_items_active_owner_symbol",
+            "user_account_id",
+            "symbol",
+            unique=True,
+            sqlite_where=text("ended_at IS NULL AND user_account_id IS NOT NULL"),
+            postgresql_where=text("ended_at IS NULL AND user_account_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    owner_id: Mapped[str | None] = mapped_column(
+        "user_account_id", ForeignKey("user_accounts.id"), nullable=True, index=True
+    )
     symbol: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def is_active(self) -> bool:
+        return self.ended_at is None
+
+    def end(self, ended_at: datetime) -> None:
+        if self.ended_at is None:
+            self.ended_at = ended_at
+
+
+# Backward-compatible import name while callers migrate to the domain term.
+WatchlistItem = WatchlistSubscription
 
 
 class UserAccountRecord(Base):
