@@ -24,7 +24,10 @@ from app.interfaces.rule_validation import RuleValidationAgent
 from app.repositories import AlertConditionRepository, WatchlistRepository
 from app.services import AnalysisProvider
 from app.application.auth_sessions import LoginAttemptService, SessionService
+from app.application.login import LoginService
+from app.integrations.kakao_auth import KakaoAuthError, KakaoExternalLogin, build_authorize_url, kakao_settings
 from app.repositories.auth import SqlAlchemyAuthSessionRepository, SqlAlchemyLoginAttemptRepository
+from app.repositories.auth import SqlAlchemyUserAccountRepository
 
 
 def get_rule_validation_agent() -> RuleValidationAgent:
@@ -65,6 +68,17 @@ def get_login_attempt_service(
 
 
 def get_authorization_url():
-    def unavailable(_: str) -> str:
-        raise RuntimeError("external login is not configured")
-    return unavailable
+    return lambda state: build_authorize_url(state=state)
+
+
+def get_login_service(db: Session = Depends(get_db)) -> LoginService:
+    settings = kakao_settings()
+    rest_api_key = settings["rest_api_key"]
+    if not rest_api_key:
+        raise KakaoAuthError("KAKAO_REST_API_KEY is required")
+    external_login = KakaoExternalLogin(
+        rest_api_key=rest_api_key,
+        redirect_uri=settings["redirect_uri"],
+        client_secret=settings["client_secret"],
+    )
+    return LoginService(external_login, SqlAlchemyUserAccountRepository(db))

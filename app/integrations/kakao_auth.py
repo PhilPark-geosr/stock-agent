@@ -9,12 +9,13 @@ from urllib.parse import urlencode
 
 import httpx
 
+from app.domain.auth import ExternalLoginCredential, LoginIdentity
 from app.core.settings import _ENV_FILE
 
 KAKAO_AUTH_URL = "https://kauth.kakao.com/oauth/authorize"
 KAKAO_TOKEN_URL = "https://kauth.kakao.com/oauth/token"
 DEFAULT_REDIRECT_URI = "http://127.0.0.1:8000/auth/kakao/callback"
-DEFAULT_SCOPE = "talk_message"
+KAKAO_USER_URL = "https://kapi.kakao.com/v2/user/me"
 
 
 class KakaoAuthError(RuntimeError):
@@ -34,7 +35,7 @@ def kakao_settings() -> dict[str, str | None]:
     }
 
 
-def build_authorize_url(*, rest_api_key: str | None = None, redirect_uri: str | None = None) -> str:
+def build_authorize_url(*, state: str, rest_api_key: str | None = None, redirect_uri: str | None = None) -> str:
     settings = kakao_settings()
     client_id = rest_api_key or settings["rest_api_key"]
     if not client_id:
@@ -44,7 +45,7 @@ def build_authorize_url(*, rest_api_key: str | None = None, redirect_uri: str | 
         "client_id": client_id,
         "redirect_uri": redirect_uri or settings["redirect_uri"] or DEFAULT_REDIRECT_URI,
         "response_type": "code",
-        "scope": DEFAULT_SCOPE,
+        "state": state,
     }
     return f"{KAKAO_AUTH_URL}?{urlencode(params)}"
 
@@ -137,34 +138,78 @@ def refresh_access_token(
             http.close()
 
 
-def persist_tokens_to_env(token_payload: dict[str, Any]) -> None:
-    """Merge Kakao tokens into the project .env file."""
+class KakaoExternalLogin:
+    def __init__(
+        self,
+        *,
+        rest_api_key: str,
+        redirect_uri: str,
+        client_secret: str | None = None,
+        client: httpx.Client | None = None,
+        token_url: str = KAKAO_TOKEN_URL,
+        user_url: str = KAKAO_USER_URL,
+    ) -> None:
+        self.rest_api_key = rest_api_key
+        self.redirect_uri = redirect_uri
+        self.client_secret = client_secret
+        self.client = client
+        self.token_url = token_url
+        self.user_url = user_url
 
+    def login(self, credential: ExternalLoginCredential) -> LoginIdentity:
+        if credential.redirect_uri != self.redirect_uri:
+            raise KakaoAuthError("redirect URI does not match configured Kakao callback")
+        owns_client = self.client is None
+        http = self.client or httpx.Client(timeout=30.0)
+        try:
+            data = {
+                "grant_type": "authorization_code",
+                "client_id": self.rest_api_key,
+                "redirect_uri": credential.redirect_uri,
+                "code": credential.authorization_code,
+            }
+            if self.client_secret:
+                data["client_secret"] = self.client_secret
+            token_response = http.post(self.token_url, data=data)
+            self._raise_for_status(token_response, "token")
+            access_token = token_response.json().get("access_token")
+            if not access_token:
+                raise KakaoAuthError("Kakao response did not include access_token")
+            user_response = http.get(self.user_url, headers={"Authorization": f"Bearer {access_token}"})
+            self._raise_for_status(user_response, "user")
+            subject_id = user_response.json().get("id")
+            if subject_id is None:
+                raise KakaoAuthError("Kakao user response did not include id")
+            return LoginIdentity("kakao", str(subject_id))
+        finally:
+            if owns_client:
+                http.close()
+
+    @staticmethod
+    def _raise_for_status(response: httpx.Response, operation: str) -> None:
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise KakaoAuthError(f"Kakao {operation} request failed: {response.status_code}") from exc
+
+
+def persist_tokens_to_env(token_payload: dict[str, Any]) -> None:
+    """Persist notification-connection tokens; service login never calls this function."""
     access_token = token_payload.get("access_token")
     refresh_token = token_payload.get("refresh_token")
     if not access_token:
         raise KakaoAuthError("Kakao response did not include access_token")
-
-    lines: list[str] = []
-    if _ENV_FILE.exists():
-        lines = _ENV_FILE.read_text(encoding="utf-8").splitlines()
-
-    values = {
-        "KAKAO_ACCESS_TOKEN": str(access_token),
-    }
+    lines = _ENV_FILE.read_text(encoding="utf-8").splitlines() if _ENV_FILE.exists() else []
+    values = {"KAKAO_ACCESS_TOKEN": str(access_token)}
     if refresh_token:
         values["KAKAO_REFRESH_TOKEN"] = str(refresh_token)
-
     for key, value in values.items():
         pattern = re.compile(rf"^{re.escape(key)}=.*$")
-        replaced = False
         for index, line in enumerate(lines):
             if pattern.match(line):
                 lines[index] = f"{key}={value}"
-                replaced = True
                 break
-        if not replaced:
+        else:
             lines.append(f"{key}={value}")
-
     _ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
     os.environ.update(values)

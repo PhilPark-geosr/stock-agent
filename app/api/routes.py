@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.api.deps import (
@@ -14,14 +14,15 @@ from app.api.deps import (
     get_authorization_url,
     get_login_attempt_service,
     get_session_service,
+    get_login_service,
 )
 from app.application.auth_sessions import AttemptExpired, AttemptNotFound, AttemptPending, AttemptUnauthorized, LoginAttemptService, SessionService
+from app.application.login import LoginService
+from app.domain.auth import ExternalLoginCredential
 from app.application.custom_rule_agent import CustomRuleAgentError
 from app.integrations.kakao_auth import (
     KakaoAuthError,
-    build_authorize_url,
-    exchange_code_for_token,
-    persist_tokens_to_env,
+    kakao_settings,
 )
 from app.interfaces.analysis import AgentConfigurationError, AnalysisAgentError
 from app.interfaces.market_data import MarketDataError
@@ -119,20 +120,15 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/auth/kakao/login")
-def kakao_login():
-    try:
-        return RedirectResponse(build_authorize_url(), status_code=status.HTTP_302_FOUND)
-    except KakaoAuthError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-
-
 @router.get("/auth/kakao/callback", response_class=HTMLResponse)
 def kakao_callback(
     request: Request,
     code: str | None = Query(default=None),
+    state_value: str | None = Query(default=None, alias="state"),
     error: str | None = Query(default=None),
     error_description: str | None = Query(default=None),
+    login_service: LoginService = Depends(get_login_service),
+    attempts: LoginAttemptService = Depends(get_login_attempt_service),
 ):
     if error:
         return templates.TemplateResponse(
@@ -141,28 +137,26 @@ def kakao_callback(
             {
                 "success": False,
                 "message": error_description or error,
-                "access_token": None,
-                "refresh_token": None,
+                "access_token": None, "refresh_token": None,
             },
             status_code=status.HTTP_400_BAD_REQUEST,
         )
-    if not code:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="code is required")
+    if not code or not state_value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="code and state are required")
 
     try:
-        token_payload = exchange_code_for_token(code)
-        persist_tokens_to_env(token_payload)
+        redirect_uri = kakao_settings()["redirect_uri"]
+        account = login_service.login(ExternalLoginCredential(code, redirect_uri))
+        attempts.complete(state_value, account)
+    except AttemptExpired as exc:
+        raise HTTPException(status_code=410, detail=str(exc)) from exc
+    except AttemptUnauthorized as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
     except KakaoAuthError as exc:
-        hint = ""
-        if "KOE010" in str(exc) or "invalid_client" in str(exc):
-            hint = (
-                " REST API 키에 클라이언트 시크릿이 켜져 있으면 .env에 "
-                "KAKAO_CLIENT_SECRET= 을 넣거나, 콘솔에서 시크릿을 끄세요."
-            )
         return templates.TemplateResponse(
             request,
             "kakao_callback.html",
-            {"success": False, "message": str(exc) + hint, "access_token": None, "refresh_token": None},
+            {"success": False, "message": str(exc), "access_token": None, "refresh_token": None},
             status_code=status.HTTP_502_BAD_GATEWAY,
         )
 
@@ -171,9 +165,9 @@ def kakao_callback(
         "kakao_callback.html",
         {
             "success": True,
-            "message": ".env에 아래 토큰을 저장했습니다. access_token은 만료되면 refresh_token으로 갱신하세요.",
-            "access_token": token_payload.get("access_token"),
-            "refresh_token": token_payload.get("refresh_token"),
+            "message": "로그인이 완료되었습니다. 앱으로 돌아가세요.",
+            "access_token": None,
+            "refresh_token": None,
         },
     )
 
