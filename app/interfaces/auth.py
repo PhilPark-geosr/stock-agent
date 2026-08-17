@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from app.domain.auth import ExternalLoginCredential, LoginIdentity, UserAccount
+from app.domain.auth import AuthSession, ExternalLoginCredential, LoginAttempt, LoginIdentity, UserAccount
 
 
 class ExternalLogin(Protocol):
@@ -12,3 +12,13 @@ class UserAccountRepository(Protocol):
 
     def save_or_get_existing(self, account: UserAccount) -> UserAccount: ...
 
+
+class LoginAttemptRepository(Protocol):
+    def save(self, attempt: LoginAttempt) -> None: ...
+    def get(self, attempt_id: str) -> LoginAttempt | None: ...
+    def find_by_state_hash(self, state_hash: str) -> LoginAttempt | None: ...
+
+
+class AuthSessionRepository(Protocol):
+    def save(self, session: AuthSession) -> None: ...
+    def find_by_token_hash(self, token_hash: str) -> AuthSession | None: ...

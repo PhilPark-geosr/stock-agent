@@ -1,6 +1,8 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -9,7 +11,11 @@ from app.api.deps import (
     get_analysis_service,
     get_rule_validation_agent,
     get_watchlist_repository,
+    get_authorization_url,
+    get_login_attempt_service,
+    get_session_service,
 )
+from app.application.auth_sessions import AttemptExpired, AttemptNotFound, AttemptPending, AttemptUnauthorized, LoginAttemptService, SessionService
 from app.application.custom_rule_agent import CustomRuleAgentError
 from app.integrations.kakao_auth import (
     KakaoAuthError,
@@ -36,6 +42,67 @@ from app.services import AnalysisProvider, ScheduledBatchResult
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
+bearer = HTTPBearer(auto_error=False)
+
+
+class LoginAttemptCreate(BaseModel):
+    verifier_challenge: str
+
+
+class LoginAttemptExchange(BaseModel):
+    verifier: str
+
+
+def _account_payload(account):
+    return {"id": account.id, "login_provider": account.login_identity.provider}
+
+
+@router.post("/auth/login-attempts", status_code=status.HTTP_201_CREATED)
+def start_login_attempt(payload: LoginAttemptCreate, attempts: LoginAttemptService = Depends(get_login_attempt_service), authorization_url=Depends(get_authorization_url)):
+    result = attempts.start(payload.verifier_challenge)
+    try:
+        url = authorization_url(result.state)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"attempt_id": result.attempt_id, "authorization_url": url, "expires_at": result.expires_at}
+
+
+@router.post("/auth/login-attempts/{attempt_id}/exchange")
+def exchange_login_attempt(attempt_id: str, payload: LoginAttemptExchange, attempts: LoginAttemptService = Depends(get_login_attempt_service)):
+    try:
+        result = attempts.exchange(attempt_id, payload.verifier)
+    except AttemptPending:
+        return Response(status_code=status.HTTP_202_ACCEPTED)
+    except AttemptNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AttemptExpired as exc:
+        raise HTTPException(status_code=410, detail=str(exc)) from exc
+    except AttemptUnauthorized as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return {"session_token": result.token, "account": _account_payload(result.account)}
+
+
+def _token(credentials: HTTPAuthorizationCredentials | None) -> str:
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+    return credentials.credentials
+
+
+@router.get("/auth/session")
+def get_auth_session(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), sessions: SessionService = Depends(get_session_service)):
+    try:
+        return _account_payload(sessions.authenticate(_token(credentials)))
+    except AttemptUnauthorized as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+@router.delete("/auth/session", status_code=status.HTTP_204_NO_CONTENT)
+def delete_auth_session(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), sessions: SessionService = Depends(get_session_service)):
+    try:
+        sessions.revoke(_token(credentials))
+    except AttemptUnauthorized as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/", response_class=HTMLResponse)

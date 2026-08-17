@@ -23,6 +23,8 @@ from app.interfaces.repositories import (
 from app.interfaces.rule_validation import RuleValidationAgent
 from app.repositories import AlertConditionRepository, WatchlistRepository
 from app.services import AnalysisProvider
+from app.application.auth_sessions import LoginAttemptService, SessionService
+from app.repositories.auth import SqlAlchemyAuthSessionRepository, SqlAlchemyLoginAttemptRepository
 
 
 def get_rule_validation_agent() -> RuleValidationAgent:
@@ -49,3 +51,20 @@ def get_watchlist_repository(db: Session = Depends(get_db)) -> WatchlistReposito
 
 def get_alert_condition_repository(db: Session = Depends(get_db)) -> AlertConditionRepositoryInterface:
     return AlertConditionRepository(db)
+
+
+def get_session_service(db: Session = Depends(get_db)) -> SessionService:
+    return SessionService(SqlAlchemyAuthSessionRepository(db))
+
+
+def get_login_attempt_service(
+    db: Session = Depends(get_db),
+    sessions: SessionService = Depends(get_session_service),
+) -> LoginAttemptService:
+    return LoginAttemptService(SqlAlchemyLoginAttemptRepository(db), sessions)
+
+
+def get_authorization_url():
+    def unavailable(_: str) -> str:
+        raise RuntimeError("external login is not configured")
+    return unavailable

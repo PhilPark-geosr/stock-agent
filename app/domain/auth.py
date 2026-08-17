@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import uuid4
 
 
@@ -29,3 +30,21 @@ class UserAccount:
     def register(cls, identity: LoginIdentity) -> "UserAccount":
         return cls(id=str(uuid4()), login_identity=identity)
 
+
+@dataclass
+class LoginAttempt:
+    id: str
+    state_hash: str
+    verifier_challenge: str
+    expires_at: datetime
+    account: UserAccount | None = None
+    consumed_at: datetime | None = None
+
+
+@dataclass
+class AuthSession:
+    id: str
+    account: UserAccount
+    token_hash: str
+    expires_at: datetime
+    revoked_at: datetime | None = None

@@ -33,7 +33,7 @@ def test_known_legacy_database_is_stamped_without_losing_rows(tmp_path: Path) ->
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT symbol FROM watchlist_items WHERE id=1")) == "AAPL"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0002_user_accounts"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0003_auth_sessions"
     assert "user_accounts" in inspect(engine).get_table_names()
 
 
