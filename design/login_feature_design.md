@@ -343,12 +343,96 @@ flowchart LR
 
 사용자가 관심 종목 구독을 삭제하면 해당 구독에 속한 사용자 알림 조건도 함께 종료한다.
 
+- `WatchlistSubscription` 하나는 한 `UserAccount`와 하나의 `StockSymbol` 사이의 독립적인 구독 관계다.
+- `WatchlistSubscription`은 고유 식별자와 시작·종료 생명주기를 가진 애그리게이트 루트다.
+- `UserAccount`는 구독 식별자 배열이나 구독 컬렉션을 저장하지 않는다. 사용자별 목록은 저장소가 `ownerId`로 조회한다.
+- 종목은 이번 설계에서 별도 생명주기를 갖는 `Stock` 엔티티가 아니라 정규화된 `StockSymbol` 값 객체로 표현한다.
 - 종료된 조건은 더 이상 평가하거나 알림을 발송하지 않는다.
-- 같은 종목을 다시 구독해도 이전 조건을 자동으로 복원하지 않는다.
+- 구독 종료 시 그 구독의 활성 조건을 같은 시각에 함께 종료한다.
+- 같은 종목을 다시 구독하면 새 구독 식별자가 발급되며 이전 조건을 자동으로 복원하지 않는다.
 - 과거 조건 평가 및 알림 발송 이력은 유지한다.
 - 다른 사용자가 해당 종목을 구독하고 있으면 공유 종목 분석은 계속 수행한다.
 
 논리적으로 조건은 삭제되지만, 과거 평가 및 발송 이력이 참조할 수 있도록 필요한 조건 정보의 보존 방식은 구현 설계에서 정한다.
+
+#### 관심 종목 구독 클래스 다이어그램
+
+```mermaid
+classDiagram
+    class UserAccount {
+        <<entity>>
+        +UserAccountId id
+        +LoginIdentity loginIdentity
+    }
+
+    class WatchlistSubscription {
+        <<aggregate root>>
+        +SubscriptionId id
+        +UserAccountId ownerId
+        +StockSymbol symbol
+        +datetime startedAt
+        +datetime? endedAt
+        +start(ownerId, symbol) WatchlistSubscription
+        +end(endedAt)
+        +isActive() bool
+    }
+
+    class StockSymbol {
+        <<value object>>
+        +string value
+    }
+
+    class UserAlertCondition {
+        <<entity>>
+        +AlertConditionId id
+        +SubscriptionId subscriptionId
+        +string userRule
+        +datetime? endedAt
+        +end(endedAt)
+    }
+
+    UserAccount "1" <-- "0..*" WatchlistSubscription : 소유자
+    WatchlistSubscription "1" *-- "1" StockSymbol : 구독 대상
+    WatchlistSubscription "1" *-- "0..*" UserAlertCondition : 조건 소유
+```
+
+#### 구독 불변식
+
+- 활성 구독은 `(ownerId, StockSymbol)` 조합당 하나만 존재한다.
+- 서로 다른 사용자는 같은 종목 코드를 독립적으로 구독할 수 있다.
+- 알림 조건은 `SubscriptionId`를 통해 사용자와 종목의 소유권을 따른다.
+- 구독 종료와 그 구독의 활성 조건 종료는 하나의 일관된 변경으로 처리한다.
+
+#### 관심 종목 구독 시퀀스
+
+```mermaid
+sequenceDiagram
+    actor Investor as 사용자
+    participant API as Watchlist API
+    participant Current as CurrentAccount
+    participant Service as WatchlistService
+    participant Repository as WatchlistSubscriptionRepository
+    participant Subscription as WatchlistSubscription
+
+    Investor->>API: POST /watchlist { symbol }
+    API->>Current: 인증된 사용자 확인
+    Current-->>API: UserAccountId
+    API->>Service: subscribe(userAccountId, symbol)
+    Service->>Repository: findActive(userAccountId, symbol)
+
+    alt 활성 구독이 있음
+        Repository-->>Service: 기존 WatchlistSubscription
+    else 활성 구독이 없음
+        Repository-->>Service: 없음
+        Service->>Subscription: start(userAccountId, StockSymbol)
+        Subscription-->>Service: 새 WatchlistSubscription
+        Service->>Repository: save(subscription)
+        Repository-->>Service: 저장된 WatchlistSubscription
+    end
+
+    Service-->>API: WatchlistSubscription
+    API-->>Investor: 구독 결과
+```
 
 ### 공유 분석 이력 접근
 
@@ -374,10 +458,10 @@ flowchart LR
 classDiagram
     UserAccount "1" *-- "1" LoginIdentity
     UserAccount "1" --> "*" NotificationConnection
-    UserAccount "1" --> "*" WatchlistSubscription
-    WatchlistSubscription "*" --> "1" Stock
-    WatchlistSubscription "1" --> "*" UserAlertCondition
-    Stock "1" --> "*" StockAnalysis
+    UserAccount "1" <-- "0..*" WatchlistSubscription : 소유자
+    WatchlistSubscription "1" *-- "1" StockSymbol : 구독 대상
+    WatchlistSubscription "1" *-- "0..*" UserAlertCondition
+    StockAnalysis "0..*" --> "1" StockSymbol : 분석 대상
     UserAlertCondition "1" --> "*" AlertEvaluation
     StockAnalysis "1" --> "*" AlertEvaluation
     AlertEvaluation "1" --> "0..*" NotificationDelivery
@@ -388,7 +472,8 @@ classDiagram
 | `UserAccount` | 서비스 내부 계정과 데이터 소유권의 기준 |
 | `LoginIdentity` | 사용자 계정이 소유하는 단일 로그인 신원 값 |
 | `NotificationConnection` | 사용자와 카카오톡 알림 권한의 연결 상태 |
-| `WatchlistSubscription` | 사용자가 특정 종목을 관찰한다는 관계 |
+| `WatchlistSubscription` | 한 사용자 계정과 한 종목 코드 사이에서 독립적인 식별자와 생명주기를 갖는 구독 애그리게이트 |
+| `StockSymbol` | 구독과 분석 대상을 나타내는 정규화된 종목 코드 값 |
 | `StockAnalysis` | 사용자와 무관한 공유 종목 분석 |
 | `UserAlertCondition` | 사용자가 특정 종목에 설정한 자연어 알림 조건 |
 | `AlertEvaluation` | 한 분석 시점에 사용자 조건이 충족되었는지에 대한 판단 |
