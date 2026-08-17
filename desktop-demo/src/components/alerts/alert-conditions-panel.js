@@ -5,8 +5,7 @@ function AlertConditionsPanel() {
   return `
     <section id="alert-conditions-section" class="card alert-conditions-card">
       <div class="section-heading alert-heading">
-        <div><h2>사용자 알림 조건</h2><p>API: /alert-conditions</p></div>
-        <button id="kakao-login-button" class="text-button" type="button">카카오 로그인</button>
+        <div><h2>사용자 알림 조건</h2><p>조건 저장만 제공하며 평가와 발송은 다음 설계까지 중단됩니다.</p></div>
       </div>
       <form id="alert-condition-form" class="alert-condition-form">
         <input id="alert-symbol-input" placeholder="종목 코드" aria-label="알림 조건 종목 코드">

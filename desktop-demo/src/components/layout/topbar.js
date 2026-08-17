@@ -1,4 +1,6 @@
 (() => {
+const { AccountMenu } = window.StockAgent;
+
 function Topbar() {
   return `
     <header class="topbar">
@@ -13,6 +15,7 @@ function Topbar() {
           <input id="search-input" autocomplete="off" placeholder="005930.KS 또는 삼성전자" aria-label="관심종목 검색">
         </form>
         <button id="run-analysis-button" class="primary-button" type="button">수동 분석 실행</button>
+        ${AccountMenu()}
       </div>
     </header>`;
 }

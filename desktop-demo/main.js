@@ -1,11 +1,17 @@
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, safeStorage, shell } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { createAuthenticatedRequester, createSessionStore } = require("./lib/auth-session");
+const { createLoginFlow } = require("./lib/login-flow");
 
 const API_BASE_URL = process.env.STOCK_AGENT_API_URL || "http://127.0.0.1:8000";
 const repositoryRoot = path.resolve(__dirname, "..");
 let backendProcess = null;
+let mainWindow = null;
+let sessionStore = null;
+let authenticatedRequest = null;
+let loginFlow = null;
 
 function pythonCommand() {
   const candidates = process.platform === "win32"
@@ -51,7 +57,7 @@ async function ensureBackend() {
   throw new Error("FastAPI backend did not become ready");
 }
 
-async function requestBackend({ method = "GET", requestPath, body }) {
+async function rawBackendRequest(requestPath, { method = "GET", body, timeout = 120000 } = {}) {
   if (typeof requestPath !== "string" || !requestPath.startsWith("/")) {
     throw new Error("Invalid backend request path");
   }
@@ -60,7 +66,7 @@ async function requestBackend({ method = "GET", requestPath, body }) {
     method,
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(120000)
+    signal: AbortSignal.timeout(timeout)
   });
   const text = await response.text();
   const payload = text ? JSON.parse(text) : null;
@@ -68,7 +74,62 @@ async function requestBackend({ method = "GET", requestPath, body }) {
     const detail = typeof payload?.detail === "string" ? payload.detail : JSON.stringify(payload?.detail || payload);
     throw new Error(detail || `Backend request failed (${response.status})`);
   }
-  return payload;
+  return { status: response.status, payload };
+}
+
+async function requestBackend({ method = "GET", requestPath, body }) {
+  if (typeof requestPath !== "string" || !requestPath.startsWith("/")) {
+    throw new Error("Invalid backend request path");
+  }
+  await ensureBackend();
+  const result = await authenticatedRequest(`${API_BASE_URL}${requestPath}`, { method, body });
+  return result.payload;
+}
+
+function notifySessionExpired() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("auth:expired");
+  }
+}
+
+function initializeAuthentication() {
+  sessionStore = createSessionStore({
+    safeStorage,
+    files: fs.promises,
+    tokenPath: path.join(app.getPath("userData"), "service-session.enc")
+  });
+  authenticatedRequest = createAuthenticatedRequester({
+    fetchImpl: fetch,
+    getToken: sessionStore.current,
+    clearToken: sessionStore.clear,
+    onExpired: notifySessionExpired
+  });
+  loginFlow = createLoginFlow({
+    request: rawBackendRequest,
+    openExternal: (url) => shell.openExternal(url),
+    sessionStore
+  });
+}
+
+async function restoreSession() {
+  const token = await sessionStore.restore();
+  if (!token) return null;
+  try {
+    return await requestBackend({ requestPath: "/auth/session" });
+  } catch {
+    await sessionStore.clear();
+    return null;
+  }
+}
+
+async function logout() {
+  try {
+    if (sessionStore.current()) {
+      await requestBackend({ method: "DELETE", requestPath: "/auth/session" });
+    }
+  } finally {
+    await sessionStore.clear();
+  }
 }
 
 function registerBackendHandlers() {
@@ -77,10 +138,9 @@ function registerBackendHandlers() {
     await ensureBackend();
     return { connected: true, baseUrl: API_BASE_URL };
   });
-  ipcMain.handle("backend:kakao-login", async () => {
-    await ensureBackend();
-    await shell.openExternal(`${API_BASE_URL}/auth/kakao/login`);
-  });
+  ipcMain.handle("auth:restore", restoreSession);
+  ipcMain.handle("auth:login", () => loginFlow.login());
+  ipcMain.handle("auth:logout", logout);
 }
 
 function createWindow() {
@@ -100,10 +160,13 @@ function createWindow() {
     }
   });
 
+  mainWindow = window;
+  window.once("closed", () => { if (mainWindow === window) mainWindow = null; });
   window.loadFile(path.join(__dirname, "src", "index.html"));
 }
 
 app.whenReady().then(() => {
+  initializeAuthentication();
   registerBackendHandlers();
   ensureBackend().catch((error) => console.error(error));
   createWindow();
