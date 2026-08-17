@@ -28,6 +28,7 @@ def test_watchlist_crud(client):
 
 
 def test_custom_alert_condition_is_validated_and_saved(client, rule_validation_agent):
+    client.post("/watchlist", json={"symbol": "005930.KS"})
     response = client.post(
         "/alert-conditions",
         json={
@@ -68,6 +69,7 @@ def test_custom_alert_condition_rejection_returns_rewrite_guidance(client, rule_
 
 
 def test_analysis_receives_enabled_custom_conditions(client, agent):
+    client.post("/watchlist", json={"symbol": "005930.KS"})
     client.post(
         "/alert-conditions",
         json={

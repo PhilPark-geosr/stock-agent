@@ -31,19 +31,20 @@ class AlertConditionRepository(Protocol):
     def list_enabled_for_symbol(self, symbol: str) -> list[CustomAlertCondition]:
         ...
 
-    def list(self) -> list[CustomAlertConditionRecord]:
+    def list(self, owner_id: str) -> list[CustomAlertConditionRecord]:
         ...
 
     def save_validated(
         self,
         *,
+        owner_id: str,
         symbol: str,
         user_rule: str,
         validation: RuleValidationResult,
     ) -> CustomAlertConditionRecord:
         ...
 
-    def delete(self, condition_id: int) -> bool:
+    def delete(self, owner_id: str, condition_id: int) -> bool:
         ...
 
 

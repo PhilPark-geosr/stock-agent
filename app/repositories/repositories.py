@@ -62,7 +62,17 @@ class WatchlistRepository(WatchlistRepositoryInterface):
         if item is None:
             return False
 
-        item.end(datetime.now(timezone.utc))
+        ended_at = datetime.now(timezone.utc)
+        item.end(ended_at)
+        conditions = self.db.scalars(
+            select(CustomAlertConditionRecord).where(
+                CustomAlertConditionRecord.subscription_id == item.id,
+                CustomAlertConditionRecord.ended_at.is_(None),
+            )
+        )
+        for condition in conditions:
+            condition.end(ended_at)
+            self.db.add(condition)
         self.db.add(item)
         self.db.commit()
         return True
@@ -92,12 +102,24 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
         )
         return [self._to_domain(row) for row in self.db.scalars(statement)]
 
-    def list(self) -> list[CustomAlertConditionRecord]:
-        return list(self.db.scalars(select(CustomAlertConditionRecord).order_by(CustomAlertConditionRecord.id)))
+    def list(self, owner_id: str) -> list[CustomAlertConditionRecord]:
+        statement = (
+            select(CustomAlertConditionRecord)
+            .join(
+                WatchlistSubscription,
+                CustomAlertConditionRecord.subscription_id == WatchlistSubscription.id,
+            )
+            .where(WatchlistSubscription.owner_id == owner_id)
+            .where(WatchlistSubscription.ended_at.is_(None))
+            .where(CustomAlertConditionRecord.ended_at.is_(None))
+            .order_by(CustomAlertConditionRecord.id)
+        )
+        return list(self.db.scalars(statement))
 
     def save_validated(
         self,
         *,
+        owner_id: str,
         symbol: str,
         user_rule: str,
         validation: RuleValidationResult,
@@ -106,7 +128,17 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
             raise ValueError("only valid alert conditions can be saved")
 
         normalized = normalize_symbol(symbol)
+        subscription = self.db.scalar(
+            select(WatchlistSubscription).where(
+                WatchlistSubscription.owner_id == owner_id,
+                WatchlistSubscription.symbol == normalized,
+                WatchlistSubscription.ended_at.is_(None),
+            )
+        )
+        if subscription is None:
+            raise LookupError("active watchlist subscription not found")
         record = CustomAlertConditionRecord(
+            subscription_id=subscription.id,
             symbol=normalized,
             name=validation.normalized_name,
             user_rule=user_rule.strip(),
@@ -123,8 +155,9 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
             self.db.rollback()
             existing = self.db.scalar(
                 select(CustomAlertConditionRecord).where(
-                    CustomAlertConditionRecord.symbol == normalized,
+                    CustomAlertConditionRecord.subscription_id == subscription.id,
                     CustomAlertConditionRecord.user_rule == user_rule.strip(),
+                    CustomAlertConditionRecord.ended_at.is_(None),
                 )
             )
             if existing is not None:
@@ -133,11 +166,24 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
         self.db.refresh(record)
         return record
 
-    def delete(self, condition_id: int) -> bool:
-        record = self.db.get(CustomAlertConditionRecord, condition_id)
+    def delete(self, owner_id: str, condition_id: int) -> bool:
+        record = self.db.scalar(
+            select(CustomAlertConditionRecord)
+            .join(
+                WatchlistSubscription,
+                CustomAlertConditionRecord.subscription_id == WatchlistSubscription.id,
+            )
+            .where(
+                CustomAlertConditionRecord.id == condition_id,
+                CustomAlertConditionRecord.ended_at.is_(None),
+                WatchlistSubscription.owner_id == owner_id,
+                WatchlistSubscription.ended_at.is_(None),
+            )
+        )
         if record is None:
             return False
-        self.db.delete(record)
+        record.end(datetime.now(timezone.utc))
+        self.db.add(record)
         self.db.commit()
         return True
 

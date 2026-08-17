@@ -98,9 +98,21 @@ class AnalysisResult(Base):
 
 class CustomAlertConditionRecord(Base):
     __tablename__ = "custom_alert_conditions"
-    __table_args__ = (UniqueConstraint("symbol", "user_rule", name="uq_custom_alert_conditions_symbol_rule"),)
+    __table_args__ = (
+        Index(
+            "uq_custom_alert_conditions_active_subscription_rule",
+            "watchlist_subscription_id",
+            "user_rule",
+            unique=True,
+            sqlite_where=text("ended_at IS NULL AND watchlist_subscription_id IS NOT NULL"),
+            postgresql_where=text("ended_at IS NULL AND watchlist_subscription_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    subscription_id: Mapped[int | None] = mapped_column(
+        "watchlist_subscription_id", ForeignKey("watchlist_items.id"), nullable=True, index=True
+    )
     symbol: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     user_rule: Mapped[str] = mapped_column(Text, nullable=False)
@@ -111,3 +123,9 @@ class CustomAlertConditionRecord(Base):
     news_symbols: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def end(self, ended_at: datetime) -> None:
+        if self.ended_at is None:
+            self.ended_at = ended_at
+            self.enabled = False

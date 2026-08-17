@@ -211,6 +211,7 @@ def delete_watchlist_item(
 )
 def create_alert_condition(
     payload: CustomAlertConditionCreate,
+    account: UserAccount = Depends(get_current_account),
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
     validation_agent: RuleValidationAgent = Depends(get_rule_validation_agent),
 ):
@@ -231,26 +232,32 @@ def create_alert_condition(
             },
         )
 
-    return alert_condition_repository.save_validated(
-        symbol=payload.symbol,
-        user_rule=payload.user_rule,
-        validation=validation,
-    )
+    try:
+        return alert_condition_repository.save_validated(
+            owner_id=account.id,
+            symbol=payload.symbol,
+            user_rule=payload.user_rule,
+            validation=validation,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get("/alert-conditions", response_model=list[CustomAlertConditionRead])
 def list_alert_conditions(
+    account: UserAccount = Depends(get_current_account),
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
 ):
-    return alert_condition_repository.list()
+    return alert_condition_repository.list(account.id)
 
 
 @router.delete("/alert-conditions/{condition_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_alert_condition(
     condition_id: int,
+    account: UserAccount = Depends(get_current_account),
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
 ):
-    if not alert_condition_repository.delete(condition_id):
+    if not alert_condition_repository.delete(account.id, condition_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alert condition not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
