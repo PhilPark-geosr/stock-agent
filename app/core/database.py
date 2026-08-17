@@ -31,27 +31,10 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    from sqlalchemy import inspect, text
-
-    from app.domain import models  # noqa: F401
-
     logger.info("Database init url=%s", _safe_database_url(DATABASE_URL))
-    Base.metadata.create_all(bind=engine)
-    inspector = inspect(engine)
-    if inspector.has_table("analysis_results"):
-        columns = {column["name"] for column in inspector.get_columns("analysis_results")}
-        if "alert_sent_at" not in columns:
-            with engine.begin() as connection:
-                connection.execute(
-                    text("ALTER TABLE analysis_results ADD COLUMN alert_sent_at DATETIME")
-                )
-    if inspector.has_table("custom_alert_conditions"):
-        columns = {column["name"] for column in inspector.get_columns("custom_alert_conditions")}
-        if "normalized_rule" not in columns:
-            with engine.begin() as connection:
-                connection.execute(
-                    text("ALTER TABLE custom_alert_conditions ADD COLUMN normalized_rule TEXT")
-                )
+    from app.core.migrations import migrate_database
+
+    migrate_database(DATABASE_URL)
 
 
 def _safe_database_url(url: str) -> str:
