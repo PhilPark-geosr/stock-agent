@@ -21,6 +21,18 @@ class WatchlistItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
+class UserAccountRecord(Base):
+    __tablename__ = "user_accounts"
+    __table_args__ = (
+        UniqueConstraint("login_provider", "provider_subject_id", name="uq_user_accounts_login_identity"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    login_provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_subject_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
 class AnalysisResult(Base):
     __tablename__ = "analysis_results"
 

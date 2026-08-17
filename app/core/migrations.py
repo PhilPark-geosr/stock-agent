@@ -38,4 +38,4 @@ def migrate_database(database_url: str) -> None:
         if not required <= actual:
             raise RuntimeError("unknown database schema; refusing to stamp it")
     command.stamp(config, BASELINE_REVISION)
-
+    command.upgrade(config, "head")
