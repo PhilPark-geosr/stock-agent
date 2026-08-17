@@ -36,6 +36,10 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
 def _hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -60,7 +64,7 @@ class SessionService:
 
     def authenticate(self, token: str) -> UserAccount:
         session = self.sessions.find_by_token_hash(self.hash_token(token))
-        if session is None or session.revoked_at is not None or self.now() >= session.expires_at:
+        if session is None or session.revoked_at is not None or _as_utc(self.now()) >= _as_utc(session.expires_at):
             raise AttemptUnauthorized("invalid session")
         return session.account
 
@@ -94,7 +98,7 @@ class LoginAttemptService:
         attempt = self.attempts.find_by_state_hash(_hash(state))
         if attempt is None:
             raise AttemptUnauthorized("invalid state")
-        if self.now() >= attempt.expires_at:
+        if _as_utc(self.now()) >= _as_utc(attempt.expires_at):
             raise AttemptExpired("login attempt expired")
         attempt.account = account
         self.attempts.save(attempt)
@@ -105,7 +109,7 @@ class LoginAttemptService:
             raise AttemptNotFound("login attempt not found")
         if not hmac.compare_digest(self.challenge_for(verifier), attempt.verifier_challenge):
             raise AttemptUnauthorized("invalid verifier")
-        if self.now() >= attempt.expires_at:
+        if _as_utc(self.now()) >= _as_utc(attempt.expires_at):
             raise AttemptExpired("login attempt expired")
         if attempt.consumed_at is not None:
             raise AttemptUnauthorized("login attempt already consumed")

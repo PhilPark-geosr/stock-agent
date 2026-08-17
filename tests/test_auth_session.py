@@ -10,6 +10,7 @@ from app.application.auth_sessions import (
     SessionService,
 )
 from app.domain.auth import LoginIdentity, UserAccount
+from app.repositories.auth import SqlAlchemyAuthSessionRepository, SqlAlchemyUserAccountRepository
 
 NOW = datetime(2026, 8, 17, tzinfo=timezone.utc)
 
@@ -79,3 +80,13 @@ def test_session_has_thirty_day_absolute_expiry() -> None:
     stored = sessions.find_by_token_hash(service.hash_token(result.token))
     assert stored.expires_at == NOW + timedelta(days=30)
 
+
+def test_sqlite_session_round_trip_preserves_validity(db_session) -> None:
+    account = SqlAlchemyUserAccountRepository(db_session).save_or_get_existing(
+        UserAccount.register(LoginIdentity("kakao", "sqlite-user"))
+    )
+    service = SessionService(SqlAlchemyAuthSessionRepository(db_session), now=lambda: NOW)
+
+    result = service.issue(account)
+
+    assert service.authenticate(result.token) == account
