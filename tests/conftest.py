@@ -47,10 +47,17 @@ class FakeMarketDataProvider:
         )
         self.error = error
         self.calls: list[str] = []
+        self.close_calls: list[tuple[str, object]] = []
 
     def fetch(self, symbol: str) -> MarketDataSnapshot:
         self.calls.append(symbol)
         if self.error is not None:
+            raise self.error
+        return self.snapshot.model_copy(update={"symbol": symbol})
+
+    def fetch_close(self, symbol: str, trading_date) -> MarketDataSnapshot:
+        self.close_calls.append((symbol, trading_date))
+        if self.error:
             raise self.error
         return self.snapshot.model_copy(update={"symbol": symbol})
 
@@ -146,6 +153,22 @@ def current_account(db_session) -> UserAccount:
 
 
 @pytest.fixture
+def authenticate_as(db_session):
+    from app.api.deps import get_current_account, require_internal_operator
+
+    def authenticate(subject: str, *symbols: str) -> UserAccount:
+        account = SqlAlchemyUserAccountRepository(db_session).save_or_get_existing(
+            UserAccount.register(LoginIdentity("kakao", subject))
+        )
+        for symbol in symbols:
+            WatchlistRepository(db_session).add(account.id, StockSymbol.of(symbol))
+        app.dependency_overrides[get_current_account] = lambda account=account: account
+        return account
+
+    return authenticate
+
+
+@pytest.fixture
 def client(
     db_session,
     market_data: FakeMarketDataProvider,
@@ -172,10 +195,11 @@ def client(
     app.dependency_overrides[get_analysis_agent] = lambda: agent
     app.dependency_overrides[get_alert_notifier] = lambda: alert_notifier
     from app.api.routes import get_rule_validation_agent
-    from app.api.deps import get_current_account
+    from app.api.deps import get_current_account, require_internal_operator
 
     app.dependency_overrides[get_rule_validation_agent] = lambda: rule_validation_agent
     app.dependency_overrides[get_current_account] = lambda: current_account
+    app.dependency_overrides[require_internal_operator] = lambda: None
     app.dependency_overrides[get_analysis_service] = override_analysis_service
     test_client = TestClient(app)
     try:

@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from app.api.deps import (
     get_alert_condition_repository,
     get_analysis_service,
+    get_briefing_service,
     get_rule_validation_agent,
     get_watchlist_repository,
     get_authorization_url,
@@ -16,6 +17,7 @@ from app.api.deps import (
     get_session_service,
     get_login_service,
     get_current_account,
+    require_internal_operator,
 )
 from app.application.auth_sessions import AttemptExpired, AttemptNotFound, AttemptPending, AttemptUnauthorized, LoginAttemptService, SessionService
 from app.application.login import LoginService
@@ -35,13 +37,22 @@ from app.interfaces.rule_validation import RuleValidationAgent, RuleValidationEr
 from app.schemas import (
     AnalysisResultHistoryItem,
     AnalysisResultRead,
+    BriefingDetailRead,
+    BriefingRead,
+    BriefingRunRequest,
     CustomAlertConditionCreate,
     CustomAlertConditionRead,
     WatchlistCreate,
     WatchlistItemRead,
 )
 from app.services.scheduler import run_scheduled_batch
-from app.services import AnalysisProvider, ScheduledBatchResult
+from app.services import (
+    AnalysisProvider,
+    BriefingService,
+    EmptyWatchlistError,
+    NonTradingDayError,
+    ScheduledBatchResult,
+)
 
 
 router = APIRouter()
@@ -363,3 +374,68 @@ def get_analysis_by_id(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/internal/briefings/run", response_model=BriefingDetailRead)
+def run_briefing(
+    payload: BriefingRunRequest,
+    briefing_service: BriefingService = Depends(get_briefing_service),
+    account: UserAccount = Depends(get_current_account),
+    _internal: None = Depends(require_internal_operator),
+):
+    try:
+        briefing = briefing_service.generate(
+            user_account_id=account.id,
+            exchange=payload.exchange,
+            briefing_type=payload.briefing_type,
+            trading_date=payload.trading_date,
+            force=payload.force,
+        )
+    except (NonTradingDayError, EmptyWatchlistError) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _briefing_detail(briefing_service, briefing)
+
+
+@router.get("/users/me/briefings", response_model=list[BriefingRead])
+def list_my_briefings(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    briefing_service: BriefingService = Depends(get_briefing_service),
+    account: UserAccount = Depends(get_current_account),
+):
+    return briefing_service.list_for_user(account.id, limit=limit, offset=offset)
+
+
+@router.get("/users/me/briefings/{briefing_id}", response_model=BriefingDetailRead)
+def get_my_briefing(
+    briefing_id: int,
+    briefing_service: BriefingService = Depends(get_briefing_service),
+    account: UserAccount = Depends(get_current_account),
+):
+    try:
+        briefing = briefing_service.get_for_user(briefing_id, account.id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _briefing_detail(briefing_service, briefing)
+
+
+def _briefing_detail(briefing_service: BriefingService, briefing) -> dict:
+    return {
+        "id": briefing.id,
+        "user_account_id": briefing.user_account_id,
+        "briefing_type": briefing.briefing_type,
+        "exchange": briefing.exchange,
+        "trading_date": briefing.trading_date,
+        "status": briefing.status,
+        "summary": briefing.summary,
+        "generated_at": briefing.generated_at,
+        "version": briefing.version,
+        "resolved_symbols": briefing.resolved_symbols,
+        "failure_count": briefing.failure_count,
+        "items": briefing_service.get_items(briefing.id),
+        "deliveries": briefing_service.get_deliveries(briefing.id),
+        "scopes": briefing_service.get_scopes(briefing.id),
+        "failures": briefing_service.get_failures(briefing.id),
+    }

@@ -1,6 +1,8 @@
 from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
 from app.core.migrations import migrate_database
@@ -33,7 +35,7 @@ def test_known_legacy_database_is_stamped_without_losing_rows(tmp_path: Path) ->
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT symbol FROM watchlist_items WHERE id=1")) == "AAPL"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0006_shared_analysis"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0007_investment_briefings"
         columns = {column["name"] for column in inspect(engine).get_columns("watchlist_items")}
         assert {"user_account_id", "ended_at"} <= columns
         condition_columns = {
@@ -43,8 +45,10 @@ def test_known_legacy_database_is_stamped_without_losing_rows(tmp_path: Path) ->
         analysis_columns = {
             column["name"] for column in inspect(engine).get_columns("analysis_results")
         }
-        assert "shared_safe" in analysis_columns
-    assert "user_accounts" in inspect(engine).get_table_names()
+        assert {"shared_safe", "normalized_judgment", "briefing_type", "trading_date"} <= analysis_columns
+        assert "alert_sent_at" in analysis_columns
+    tables = set(inspect(engine).get_table_names())
+    assert {"user_accounts", "investment_briefings", "briefing_items", "briefing_scopes"} <= tables
 
 
 def test_unknown_existing_schema_is_not_auto_stamped(tmp_path: Path) -> None:
@@ -55,3 +59,18 @@ def test_unknown_existing_schema_is_not_auto_stamped(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="unknown database schema"):
         migrate_database(url)
+
+
+def test_briefing_schema_can_be_rolled_back_and_reapplied(tmp_path: Path) -> None:
+    url = _url(tmp_path / "round-trip.db")
+    migrate_database(url)
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", url)
+
+    command.downgrade(config, "0006_shared_analysis")
+    downgraded_tables = set(inspect(create_engine(url)).get_table_names())
+    assert "investment_briefings" not in downgraded_tables
+
+    command.upgrade(config, "head")
+    upgraded_tables = set(inspect(create_engine(url)).get_table_names())
+    assert {"investment_briefings", "briefing_items", "briefing_failures"} <= upgraded_tables

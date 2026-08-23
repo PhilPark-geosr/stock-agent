@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -86,6 +86,16 @@ class WatchlistRepository(WatchlistRepositoryInterface):
             .order_by(WatchlistSubscription.symbol)
         )
         return [StockSymbol.of(symbol) for symbol in self.db.scalars(statement)]
+
+    def list_owner_ids(self) -> list[str]:
+        statement = (
+            select(WatchlistSubscription.owner_id)
+            .where(WatchlistSubscription.owner_id.is_not(None))
+            .where(WatchlistSubscription.ended_at.is_(None))
+            .distinct()
+            .order_by(WatchlistSubscription.owner_id)
+        )
+        return [owner_id for owner_id in self.db.scalars(statement) if owner_id is not None]
 
 
 class AlertConditionRepository(AlertConditionRepositoryInterface):
@@ -252,6 +262,9 @@ class AnalysisRepository(AnalysisRepositoryInterface):
         symbol: str,
         overall_judgment: str,
         summary: str,
+        normalized_judgment: str = "UNKNOWN",
+        briefing_type: str | None = None,
+        trading_date: date | None = None,
         data_timestamp: datetime | None = None,
         key_reasons: list[str] | None = None,
         risk_factors: list[str] | None = None,
@@ -263,6 +276,9 @@ class AnalysisRepository(AnalysisRepositoryInterface):
     ) -> AnalysisResult:
         result = AnalysisResult(
             symbol=normalize_symbol(symbol),
+            normalized_judgment=normalized_judgment,
+            briefing_type=briefing_type,
+            trading_date=trading_date,
             data_timestamp=data_timestamp,
             overall_judgment=overall_judgment,
             summary=summary,
@@ -312,3 +328,45 @@ class AnalysisRepository(AnalysisRepositoryInterface):
             )
         )
         return sum(1 for _ in rows)
+
+    def get_previous_comparable(
+        self,
+        *,
+        symbol: str,
+        before_id: int | None = None,
+        briefing_type: str | None = None,
+        trading_date: date | None = None,
+    ) -> AnalysisResult | None:
+        normalized = normalize_symbol(symbol)
+        statement = select(AnalysisResult).where(
+            AnalysisResult.symbol == normalized,
+            AnalysisResult.normalized_judgment != "UNKNOWN",
+            AnalysisResult.shared_safe.is_(True),
+        )
+        if before_id is not None:
+            statement = statement.where(AnalysisResult.id < before_id)
+        if briefing_type is not None:
+            statement = statement.where(AnalysisResult.briefing_type == briefing_type)
+        if trading_date is not None:
+            statement = statement.where(AnalysisResult.trading_date == trading_date)
+        statement = statement.order_by(AnalysisResult.analyzed_at.desc(), AnalysisResult.id.desc()).limit(1)
+        return self.db.scalar(statement)
+
+    def get_for_briefing(
+        self,
+        *,
+        symbol: str,
+        briefing_type: str,
+        trading_date: date,
+    ) -> AnalysisResult | None:
+        return self.db.scalar(
+            select(AnalysisResult)
+            .where(
+                AnalysisResult.symbol == normalize_symbol(symbol),
+                AnalysisResult.briefing_type == briefing_type,
+                AnalysisResult.trading_date == trading_date,
+                AnalysisResult.shared_safe.is_(True),
+            )
+            .order_by(AnalysisResult.analyzed_at.desc(), AnalysisResult.id.desc())
+            .limit(1)
+        )

@@ -1,9 +1,36 @@
 # 주식 분석
 
-여러 개인 투자자가 각자의 관심 종목, 알림 조건과 분석 정보를 관리하는 주식 분석 서비스의 핵심 언어를 정의한다.
+여러 개인 투자자가 각자의 관심 종목과 알림 조건을 관리하고, 공유 종목 분석을 바탕으로 사용자별 투자 브리핑을 확인하는 서비스의 핵심 언어를 정의한다.
 
 ## Language
 
+**Investment Briefing**:
+A stored collection owned by one user account that selects and compares shared stock analyses for one exchange, trading date, and briefing type.
+_Avoid_: Alert, report, notification
+
+**Pre-Market Briefing**:
+An investment briefing whose comparison point is the latest valid prior analysis and whose market session has not opened.
+_Avoid_: Morning report
+
+**Post-Market Summary**:
+An investment briefing based on confirmed closing data whose preferred comparison point is the same session's pre-market analysis.
+_Avoid_: Closing alert
+
+**Briefing Scope**:
+The immutable snapshot of resolved securities for one completed investment-briefing version. A retention policy may discard an older version as a whole, but a retained version's scope is never reinterpreted. Security search and filter resolution occur outside the briefing context.
+_Avoid_: Search query, raw mention text
+
+**Judgment Change**:
+A comparable difference between normalized current and previous judgments for the same stock. The comparison is shared market analysis; its inclusion and presentation belong to a user's investment briefing.
+_Avoid_: Alert trigger, trade signal
+
+**Delivery Attempt**:
+A channel-specific effort to transmit an already stored investment briefing; its failure never changes the briefing's generation result.
+_Avoid_: Briefing generation
+
+**Trading Session**:
+The exchange calendar's dated regular-trading interval, including holiday, early-close, timezone, and daylight-saving rules.
+_Avoid_: Weekday, fixed UTC window
 **사용자 계정(User Account)**:
 개인 투자자를 서비스 안에서 식별하며 관심 종목, 알림 조건과 알림 수신 설정의 소유권 기준이 되는 계정.
 _Avoid_: User, 개인 투자자, 운영자, 로컬 사용자

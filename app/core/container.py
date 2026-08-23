@@ -8,20 +8,26 @@ from typing import Callable
 from sqlalchemy.orm import Session
 
 from app.application.analysis_graph import MainAnalysisAgent
+from app.application.briefing_renderer import KoreanBriefingRenderer
 from app.application.custom_rule_agent import CustomRuleAgent, LangGraphCustomRuleAgent
 from app.core.scheduler_config import scheduler_settings
 from app.core.trading_window import is_alert_window
+from app.integrations.exchange_calendar import ExchangeCalendarsTradingCalendar
 from app.integrations.kakao_notify import get_default_alert_notifier
 from app.integrations.llm.gemini_analysis_agent import GeminiAnalysisAgent
 from app.integrations.yfinance_market_data_provider import YFinanceMarketDataProvider
 from app.interfaces.analysis import AnalysisAgent
 from app.interfaces.market_data import MarketDataProvider
 from app.interfaces.notifications import AlertNotifier
+from app.interfaces.trading_calendar import TradingCalendar
 from app.repositories import (
     AnalysisRepository as SqlAlchemyAnalysisRepository,
     WatchlistRepository as SqlAlchemyWatchlistRepository,
+    BriefingRepository as SqlAlchemyBriefingRepository,
 )
-from app.services import AnalysisService
+from app.services import AnalysisService, BriefingService
+from app.services.briefing_delivery import BriefingDeliveryService
+from app.services.briefing_scheduler import BriefingScheduleService
 
 
 def build_alert_window_checker() -> Callable[[datetime], bool]:
@@ -54,9 +60,46 @@ def build_analysis_service(
         now_provider=now_provider,
     )
 
+def build_briefing_service(
+    db: Session,
+    *,
+    analysis_service: AnalysisService | None = None,
+    market_data_provider: MarketDataProvider | None = None,
+    trading_calendar: TradingCalendar | None = None,
+) -> BriefingService:
+    provider = analysis_service or build_analysis_service(db)
+    analysis_repository = SqlAlchemyAnalysisRepository(db)
+    watchlist_repository = SqlAlchemyWatchlistRepository(db)
+    return BriefingService(
+        briefing_repository=SqlAlchemyBriefingRepository(db),
+        analysis_repository=analysis_repository,
+        watchlist_repository=watchlist_repository,
+        analysis_provider=provider,
+        market_data_provider=market_data_provider or provider.market_data_provider,
+        trading_calendar=trading_calendar or get_trading_calendar(),
+    )
+
+
+def build_briefing_schedule_service(db: Session) -> BriefingScheduleService:
+    calendar = get_trading_calendar()
+    analysis_service = build_analysis_service(db)
+    return BriefingScheduleService(
+        briefing_service=build_briefing_service(
+            db,
+            analysis_service=analysis_service,
+            trading_calendar=calendar,
+        ),
+        watchlist_repository=SqlAlchemyWatchlistRepository(db),
+        trading_calendar=calendar,
+    )
+
 
 def get_market_data_provider() -> MarketDataProvider:
     return YFinanceMarketDataProvider()
+
+
+def get_trading_calendar() -> TradingCalendar:
+    return ExchangeCalendarsTradingCalendar()
 
 
 def get_default_custom_rule_agent() -> CustomRuleAgent:
@@ -67,6 +110,20 @@ def get_analysis_agent() -> AnalysisAgent:
     return MainAnalysisAgent(
         main_model=GeminiAnalysisAgent(),
         custom_rule_agent=get_default_custom_rule_agent(),
+    )
+
+
+def build_briefing_delivery_service(
+    db: Session,
+    *,
+    notifier: AlertNotifier | None = None,
+) -> BriefingDeliveryService:
+    """Build delivery support for explicit notification-connection workflows only."""
+    return BriefingDeliveryService(
+        repository=SqlAlchemyBriefingRepository(db),
+        renderer=KoreanBriefingRenderer(),
+        notifier=notifier or get_alert_notifier(),
+        connection_is_active=lambda user_account_id, channel: False,
     )
 
 
