@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Callable, Protocol
 
 logger = logging.getLogger(__name__)
 
 from app.domain.alert_conditions import DEFAULT_SYSTEM_ALERT_CONDITIONS
 from app.domain.models import AnalysisResult as StoredAnalysisResult
+from app.domain.briefings import normalize_judgment
 from app.domain.symbols import normalize_symbol
 from app.interfaces.analysis import AnalysisAgent
 from app.interfaces.market_data import MarketDataProvider
+from app.schemas import MarketDataSnapshot, model_to_dict
 from app.interfaces.repositories import AnalysisRepository, WatchlistRepository
-from app.schemas import model_to_dict
 
 
 @dataclass
@@ -40,7 +41,9 @@ class AnalysisProvider(Protocol):
     ) -> list[StoredAnalysisResult]:
         """Return stored analysis rows newest first."""
 
-    def get_analysis_by_id(self, symbol: str, result_id: int) -> StoredAnalysisResult:
+    def get_analysis_by_id(
+        self, symbol: str, result_id: int
+    ) -> StoredAnalysisResult:
         """Return one stored analysis row by id."""
 
     def run_scheduled_batch(self, *, now: datetime | None = None) -> ScheduledBatchResult:
@@ -110,12 +113,19 @@ class AnalysisService:
             raise LookupError("analysis result not found")
         return stored
 
-    def analyze_and_store(self, symbol: str) -> StoredAnalysisResult:
+    def analyze_and_store(
+        self,
+        symbol: str,
+        *,
+        briefing_type: str | None = None,
+        trading_date: date | None = None,
+        market_data: MarketDataSnapshot | None = None,
+    ) -> StoredAnalysisResult:
         normalized_symbol = normalize_symbol(symbol)
         if not normalized_symbol:
             raise ValueError("symbol is required")
 
-        market_data = self.market_data_provider.fetch(normalized_symbol)
+        market_data = market_data or self.market_data_provider.fetch(normalized_symbol)
         alert_conditions = list(DEFAULT_SYSTEM_ALERT_CONDITIONS)
         logger.info(
             "AnalysisService prepared shared analysis symbol=%s system_conditions=%d",
@@ -128,6 +138,9 @@ class AnalysisService:
 
         return self.analysis_repository.save(
             symbol=agent_result.symbol,
+            normalized_judgment=normalize_judgment(agent_result.verdict).value,
+            briefing_type=briefing_type,
+            trading_date=trading_date,
             data_timestamp=agent_result.data_time,
             overall_judgment=agent_result.verdict,
             summary=agent_result.summary,
