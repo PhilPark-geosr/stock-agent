@@ -24,7 +24,16 @@ contextBridge.exposeInMainWorld("desktop", {
     runScheduler: () => request("POST", "/scheduler/run?force=true"),
     listAlertConditions: () => request("GET", "/alert-conditions"),
     addAlertCondition: (symbol, userRule) => request("POST", "/alert-conditions", { symbol, user_rule: userRule }),
-    deleteAlertCondition: (conditionId) => request("DELETE", `/alert-conditions/${conditionId}`),
-    openKakaoLogin: () => ipcRenderer.invoke("backend:kakao-login")
+    deleteAlertCondition: (conditionId) => request("DELETE", `/alert-conditions/${conditionId}`)
+  },
+  auth: {
+    restore: () => ipcRenderer.invoke("auth:restore"),
+    login: () => ipcRenderer.invoke("auth:login"),
+    logout: () => ipcRenderer.invoke("auth:logout"),
+    onExpired: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on("auth:expired", handler);
+      return () => ipcRenderer.removeListener("auth:expired", handler);
+    }
   }
 });

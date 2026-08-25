@@ -138,6 +138,7 @@ class CustomAlertConditionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    subscription_id: Optional[int] = None
     symbol: str
     name: str
     user_rule: str
@@ -148,6 +149,7 @@ class CustomAlertConditionRead(BaseModel):
     news_symbols: List[str] = Field(default_factory=list)
     enabled: bool
     created_at: datetime
+    ended_at: Optional[datetime] = None
 
 
 class AlertConditionRejected(BaseModel):
@@ -171,6 +173,7 @@ class AnalysisResultRead(BaseModel):
     triggered_alerts: List[str]
     alert_reason: Optional[str]
     raw_result: Optional[Dict[str, Any]]
+    shared_safe: bool
 
 
 class AnalysisResultHistoryItem(BaseModel):
@@ -186,3 +189,4 @@ class AnalysisResultHistoryItem(BaseModel):
     summary: str
     should_alert: bool
     triggered_alerts: List[str]
+    shared_safe: bool

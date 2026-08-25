@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.api.deps import (
@@ -9,13 +11,21 @@ from app.api.deps import (
     get_analysis_service,
     get_rule_validation_agent,
     get_watchlist_repository,
+    get_authorization_url,
+    get_login_attempt_service,
+    get_session_service,
+    get_login_service,
+    get_current_account,
 )
+from app.application.auth_sessions import AttemptExpired, AttemptNotFound, AttemptPending, AttemptUnauthorized, LoginAttemptService, SessionService
+from app.application.login import LoginService
+from app.domain.auth import ExternalLoginCredential
+from app.domain.auth import UserAccount
+from app.domain.symbols import StockSymbol
 from app.application.custom_rule_agent import CustomRuleAgentError
 from app.integrations.kakao_auth import (
     KakaoAuthError,
-    build_authorize_url,
-    exchange_code_for_token,
-    persist_tokens_to_env,
+    kakao_settings,
 )
 from app.interfaces.analysis import AgentConfigurationError, AnalysisAgentError
 from app.interfaces.market_data import MarketDataError
@@ -36,6 +46,80 @@ from app.services import AnalysisProvider, ScheduledBatchResult
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parents[1] / "templates"))
+bearer = HTTPBearer(auto_error=False)
+
+
+def _require_active_subscription(
+    account: UserAccount,
+    symbol: str,
+    watchlist_repository: WatchlistRepository,
+) -> None:
+    try:
+        stock_symbol = StockSymbol.of(symbol)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if watchlist_repository.get(account.id, stock_symbol) is None:
+        raise HTTPException(status_code=404, detail="active watchlist subscription not found")
+
+
+class LoginAttemptCreate(BaseModel):
+    verifier_challenge: str
+
+
+class LoginAttemptExchange(BaseModel):
+    verifier: str
+
+
+def _account_payload(account):
+    return {"id": account.id, "login_provider": account.login_identity.provider}
+
+
+@router.post("/auth/login-attempts", status_code=status.HTTP_201_CREATED)
+def start_login_attempt(payload: LoginAttemptCreate, attempts: LoginAttemptService = Depends(get_login_attempt_service), authorization_url=Depends(get_authorization_url)):
+    result = attempts.start(payload.verifier_challenge)
+    try:
+        url = authorization_url(result.state)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"attempt_id": result.attempt_id, "authorization_url": url, "expires_at": result.expires_at}
+
+
+@router.post("/auth/login-attempts/{attempt_id}/exchange")
+def exchange_login_attempt(attempt_id: str, payload: LoginAttemptExchange, attempts: LoginAttemptService = Depends(get_login_attempt_service)):
+    try:
+        result = attempts.exchange(attempt_id, payload.verifier)
+    except AttemptPending:
+        return Response(status_code=status.HTTP_202_ACCEPTED)
+    except AttemptNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AttemptExpired as exc:
+        raise HTTPException(status_code=410, detail=str(exc)) from exc
+    except AttemptUnauthorized as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return {"session_token": result.token, "account": _account_payload(result.account)}
+
+
+def _token(credentials: HTTPAuthorizationCredentials | None) -> str:
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+    return credentials.credentials
+
+
+@router.get("/auth/session")
+def get_auth_session(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), sessions: SessionService = Depends(get_session_service)):
+    try:
+        return _account_payload(sessions.authenticate(_token(credentials)))
+    except AttemptUnauthorized as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+@router.delete("/auth/session", status_code=status.HTTP_204_NO_CONTENT)
+def delete_auth_session(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), sessions: SessionService = Depends(get_session_service)):
+    try:
+        sessions.revoke(_token(credentials))
+    except AttemptUnauthorized as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -52,20 +136,15 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/auth/kakao/login")
-def kakao_login():
-    try:
-        return RedirectResponse(build_authorize_url(), status_code=status.HTTP_302_FOUND)
-    except KakaoAuthError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-
-
 @router.get("/auth/kakao/callback", response_class=HTMLResponse)
 def kakao_callback(
     request: Request,
     code: str | None = Query(default=None),
+    state_value: str | None = Query(default=None, alias="state"),
     error: str | None = Query(default=None),
     error_description: str | None = Query(default=None),
+    login_service: LoginService = Depends(get_login_service),
+    attempts: LoginAttemptService = Depends(get_login_attempt_service),
 ):
     if error:
         return templates.TemplateResponse(
@@ -74,28 +153,26 @@ def kakao_callback(
             {
                 "success": False,
                 "message": error_description or error,
-                "access_token": None,
-                "refresh_token": None,
+                "access_token": None, "refresh_token": None,
             },
             status_code=status.HTTP_400_BAD_REQUEST,
         )
-    if not code:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="code is required")
+    if not code or not state_value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="code and state are required")
 
     try:
-        token_payload = exchange_code_for_token(code)
-        persist_tokens_to_env(token_payload)
+        redirect_uri = kakao_settings()["redirect_uri"]
+        account = login_service.login(ExternalLoginCredential(code, redirect_uri))
+        attempts.complete(state_value, account)
+    except AttemptExpired as exc:
+        raise HTTPException(status_code=410, detail=str(exc)) from exc
+    except AttemptUnauthorized as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
     except KakaoAuthError as exc:
-        hint = ""
-        if "KOE010" in str(exc) or "invalid_client" in str(exc):
-            hint = (
-                " REST API 키에 클라이언트 시크릿이 켜져 있으면 .env에 "
-                "KAKAO_CLIENT_SECRET= 을 넣거나, 콘솔에서 시크릿을 끄세요."
-            )
         return templates.TemplateResponse(
             request,
             "kakao_callback.html",
-            {"success": False, "message": str(exc) + hint, "access_token": None, "refresh_token": None},
+            {"success": False, "message": str(exc), "access_token": None, "refresh_token": None},
             status_code=status.HTTP_502_BAD_GATEWAY,
         )
 
@@ -104,9 +181,9 @@ def kakao_callback(
         "kakao_callback.html",
         {
             "success": True,
-            "message": ".env에 아래 토큰을 저장했습니다. access_token은 만료되면 refresh_token으로 갱신하세요.",
-            "access_token": token_payload.get("access_token"),
-            "refresh_token": token_payload.get("refresh_token"),
+            "message": "로그인이 완료되었습니다. 앱으로 돌아가세요.",
+            "access_token": None,
+            "refresh_token": None,
         },
     )
 
@@ -114,22 +191,27 @@ def kakao_callback(
 @router.post("/watchlist", response_model=WatchlistItemRead, status_code=status.HTTP_201_CREATED)
 def add_watchlist_item(
     payload: WatchlistCreate,
+    account: UserAccount = Depends(get_current_account),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
 ):
-    return watchlist_repository.add(payload.symbol)
+    return watchlist_repository.add(account.id, StockSymbol.of(payload.symbol))
 
 
 @router.get("/watchlist", response_model=list[WatchlistItemRead])
-def list_watchlist_items(watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository)):
-    return watchlist_repository.list()
+def list_watchlist_items(
+    account: UserAccount = Depends(get_current_account),
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
+):
+    return watchlist_repository.list(account.id)
 
 
 @router.delete("/watchlist/{symbol}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_watchlist_item(
     symbol: str,
+    account: UserAccount = Depends(get_current_account),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
 ):
-    deleted = watchlist_repository.delete(symbol)
+    deleted = watchlist_repository.delete(account.id, StockSymbol.of(symbol))
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="watchlist item not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -142,6 +224,7 @@ def delete_watchlist_item(
 )
 def create_alert_condition(
     payload: CustomAlertConditionCreate,
+    account: UserAccount = Depends(get_current_account),
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
     validation_agent: RuleValidationAgent = Depends(get_rule_validation_agent),
 ):
@@ -162,26 +245,32 @@ def create_alert_condition(
             },
         )
 
-    return alert_condition_repository.save_validated(
-        symbol=payload.symbol,
-        user_rule=payload.user_rule,
-        validation=validation,
-    )
+    try:
+        return alert_condition_repository.save_validated(
+            owner_id=account.id,
+            symbol=payload.symbol,
+            user_rule=payload.user_rule,
+            validation=validation,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get("/alert-conditions", response_model=list[CustomAlertConditionRead])
 def list_alert_conditions(
+    account: UserAccount = Depends(get_current_account),
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
 ):
-    return alert_condition_repository.list()
+    return alert_condition_repository.list(account.id)
 
 
 @router.delete("/alert-conditions/{condition_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_alert_condition(
     condition_id: int,
+    account: UserAccount = Depends(get_current_account),
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
 ):
-    if not alert_condition_repository.delete(condition_id):
+    if not alert_condition_repository.delete(account.id, condition_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alert condition not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -202,8 +291,11 @@ def list_analysis_history(
     symbol: str,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    account: UserAccount = Depends(get_current_account),
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
+    _require_active_subscription(account, symbol, watchlist_repository)
     try:
         return analysis_service.list_analysis_history(symbol, limit=limit, offset=offset)
     except ValueError as exc:
@@ -217,8 +309,11 @@ def list_analysis_history(
 )
 def run_manual_analysis(
     symbol: str,
+    account: UserAccount = Depends(get_current_account),
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
+    _require_active_subscription(account, symbol, watchlist_repository)
     try:
         result = analysis_service.run_manual_analysis(symbol)
     except ValueError as exc:
@@ -235,8 +330,11 @@ def run_manual_analysis(
 @router.get("/stocks/{symbol}/analysis/latest", response_model=AnalysisResultRead)
 def get_latest_analysis(
     symbol: str,
+    account: UserAccount = Depends(get_current_account),
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
+    _require_active_subscription(account, symbol, watchlist_repository)
     try:
         result = analysis_service.get_latest_analysis(symbol)
     except ValueError as exc:
@@ -254,8 +352,11 @@ def get_latest_analysis(
 def get_analysis_by_id(
     symbol: str,
     result_id: int,
+    account: UserAccount = Depends(get_current_account),
+    watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
+    _require_active_subscription(account, symbol, watchlist_repository)
     try:
         return analysis_service.get_analysis_by_id(symbol, result_id)
     except ValueError as exc:

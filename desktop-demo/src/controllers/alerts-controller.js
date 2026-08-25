@@ -46,15 +46,6 @@ function createAlertsController({ backend, showToast, showDialog, renderAlertCon
         });
       }
     });
-
-    document.querySelector("#kakao-login-button").addEventListener("click", async () => {
-      try {
-        await backend.openKakaoLogin();
-        showToast("브라우저에서 카카오 로그인을 완료하세요.");
-      } catch (error) {
-        showToast(`카카오 로그인 열기 실패: ${errorMessage(error)}`);
-      }
-    });
   }
 
   return { bindAlertsEvents, deleteAlertCondition, loadAlertConditions };

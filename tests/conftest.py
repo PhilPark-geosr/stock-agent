@@ -16,6 +16,10 @@ from app.core.container import build_analysis_service
 from app.core.database import Base, get_db
 from app.domain import models  # noqa: F401
 from app.domain.alert_conditions import RuleValidationResult
+from app.domain.auth import LoginIdentity, UserAccount
+from app.domain.symbols import StockSymbol
+from app.repositories import WatchlistRepository
+from app.repositories.auth import SqlAlchemyUserAccountRepository
 from app.interfaces.analysis import AnalysisAgentError
 from app.interfaces.market_data import MarketDataError
 from app.main import app
@@ -133,12 +137,22 @@ def rule_validation_agent() -> FakeRuleValidationAgent:
 
 
 @pytest.fixture
+def current_account(db_session) -> UserAccount:
+    account = SqlAlchemyUserAccountRepository(db_session).save_or_get_existing(
+        UserAccount.register(LoginIdentity("kakao", "test-user"))
+    )
+    WatchlistRepository(db_session).add(account.id, StockSymbol.of("005930.KS"))
+    return account
+
+
+@pytest.fixture
 def client(
     db_session,
     market_data: FakeMarketDataProvider,
     agent: FakeAnalysisAgent,
     alert_notifier: FakeAlertNotifier,
     rule_validation_agent: FakeRuleValidationAgent,
+    current_account: UserAccount,
 ) -> TestClient:
     def override_get_db():
         yield db_session
@@ -158,8 +172,10 @@ def client(
     app.dependency_overrides[get_analysis_agent] = lambda: agent
     app.dependency_overrides[get_alert_notifier] = lambda: alert_notifier
     from app.api.routes import get_rule_validation_agent
+    from app.api.deps import get_current_account
 
     app.dependency_overrides[get_rule_validation_agent] = lambda: rule_validation_agent
+    app.dependency_overrides[get_current_account] = lambda: current_account
     app.dependency_overrides[get_analysis_service] = override_analysis_service
     test_client = TestClient(app)
     try:

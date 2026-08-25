@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,13 +12,69 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class WatchlistItem(Base):
+class WatchlistSubscription(Base):
     __tablename__ = "watchlist_items"
-    __table_args__ = (UniqueConstraint("symbol", name="uq_watchlist_items_symbol"),)
+    __table_args__ = (
+        Index(
+            "uq_watchlist_items_active_owner_symbol",
+            "user_account_id",
+            "symbol",
+            unique=True,
+            sqlite_where=text("ended_at IS NULL AND user_account_id IS NOT NULL"),
+            postgresql_where=text("ended_at IS NULL AND user_account_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    owner_id: Mapped[str | None] = mapped_column(
+        "user_account_id", ForeignKey("user_accounts.id"), nullable=True, index=True
+    )
     symbol: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def is_active(self) -> bool:
+        return self.ended_at is None
+
+    def end(self, ended_at: datetime) -> None:
+        if self.ended_at is None:
+            self.ended_at = ended_at
+
+
+# Backward-compatible import name while callers migrate to the domain term.
+WatchlistItem = WatchlistSubscription
+
+
+class UserAccountRecord(Base):
+    __tablename__ = "user_accounts"
+    __table_args__ = (
+        UniqueConstraint("login_provider", "provider_subject_id", name="uq_user_accounts_login_identity"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    login_provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_subject_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class LoginAttemptRecord(Base):
+    __tablename__ = "auth_login_attempts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    state_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    verifier_challenge: Mapped[str] = mapped_column(String(128), nullable=False)
+    user_account_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AuthSessionRecord(Base):
+    __tablename__ = "auth_sessions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_account_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AnalysisResult(Base):
@@ -38,13 +94,26 @@ class AnalysisResult(Base):
     alert_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     raw_result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    shared_safe: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class CustomAlertConditionRecord(Base):
     __tablename__ = "custom_alert_conditions"
-    __table_args__ = (UniqueConstraint("symbol", "user_rule", name="uq_custom_alert_conditions_symbol_rule"),)
+    __table_args__ = (
+        Index(
+            "uq_custom_alert_conditions_active_subscription_rule",
+            "watchlist_subscription_id",
+            "user_rule",
+            unique=True,
+            sqlite_where=text("ended_at IS NULL AND watchlist_subscription_id IS NOT NULL"),
+            postgresql_where=text("ended_at IS NULL AND watchlist_subscription_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    subscription_id: Mapped[int | None] = mapped_column(
+        "watchlist_subscription_id", ForeignKey("watchlist_items.id"), nullable=True, index=True
+    )
     symbol: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     user_rule: Mapped[str] = mapped_column(Text, nullable=False)
@@ -55,3 +124,9 @@ class CustomAlertConditionRecord(Base):
     news_symbols: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def end(self, ended_at: datetime) -> None:
+        if self.ended_at is None:
+            self.ended_at = ended_at
+            self.enabled = False

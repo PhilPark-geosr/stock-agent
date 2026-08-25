@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from typing import Any
 
@@ -6,8 +8,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.domain.alert_conditions import CustomAlertCondition, RuleValidationResult
-from app.domain.models import AnalysisResult, CustomAlertConditionRecord, WatchlistItem
-from app.domain.symbols import normalize_symbol
+from app.domain.models import AnalysisResult, CustomAlertConditionRecord, WatchlistSubscription
+from app.domain.symbols import StockSymbol, normalize_symbol
 from app.interfaces.repositories import (
     AlertConditionRepository as AlertConditionRepositoryInterface,
     AnalysisRepository as AnalysisRepositoryInterface,
@@ -19,40 +21,71 @@ class WatchlistRepository(WatchlistRepositoryInterface):
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list(self) -> list[WatchlistItem]:
-        return list(self.db.scalars(select(WatchlistItem).order_by(WatchlistItem.symbol)))
+    def list(self, owner_id: str) -> list[WatchlistSubscription]:
+        statement = (
+            select(WatchlistSubscription)
+            .where(WatchlistSubscription.owner_id == owner_id)
+            .where(WatchlistSubscription.ended_at.is_(None))
+            .order_by(WatchlistSubscription.symbol)
+        )
+        return list(self.db.scalars(statement))
 
-    def get(self, symbol: str) -> WatchlistItem | None:
-        normalized = normalize_symbol(symbol)
-        return self.db.scalar(select(WatchlistItem).where(WatchlistItem.symbol == normalized))
+    def get(self, owner_id: str, symbol: StockSymbol) -> WatchlistSubscription | None:
+        return self.db.scalar(
+            select(WatchlistSubscription).where(
+                WatchlistSubscription.owner_id == owner_id,
+                WatchlistSubscription.symbol == symbol.value,
+                WatchlistSubscription.ended_at.is_(None),
+            )
+        )
 
-    def add(self, symbol: str) -> WatchlistItem:
-        normalized = normalize_symbol(symbol)
-        existing = self.get(normalized)
+    def add(self, owner_id: str, symbol: StockSymbol) -> WatchlistSubscription:
+        existing = self.get(owner_id, symbol)
         if existing is not None:
             return existing
 
-        item = WatchlistItem(symbol=normalized)
+        item = WatchlistSubscription(owner_id=owner_id, symbol=symbol.value)
         self.db.add(item)
         try:
             self.db.commit()
         except IntegrityError:
             self.db.rollback()
-            existing = self.get(normalized)
+            existing = self.get(owner_id, symbol)
             if existing is not None:
                 return existing
             raise
         self.db.refresh(item)
         return item
 
-    def delete(self, symbol: str) -> bool:
-        item = self.get(symbol)
+    def delete(self, owner_id: str, symbol: StockSymbol) -> bool:
+        item = self.get(owner_id, symbol)
         if item is None:
             return False
 
-        self.db.delete(item)
+        ended_at = datetime.now(timezone.utc)
+        item.end(ended_at)
+        conditions = self.db.scalars(
+            select(CustomAlertConditionRecord).where(
+                CustomAlertConditionRecord.subscription_id == item.id,
+                CustomAlertConditionRecord.ended_at.is_(None),
+            )
+        )
+        for condition in conditions:
+            condition.end(ended_at)
+            self.db.add(condition)
+        self.db.add(item)
         self.db.commit()
         return True
+
+    def list_distinct_active_symbols(self) -> list[StockSymbol]:
+        statement = (
+            select(WatchlistSubscription.symbol)
+            .where(WatchlistSubscription.owner_id.is_not(None))
+            .where(WatchlistSubscription.ended_at.is_(None))
+            .distinct()
+            .order_by(WatchlistSubscription.symbol)
+        )
+        return [StockSymbol.of(symbol) for symbol in self.db.scalars(statement)]
 
 
 class AlertConditionRepository(AlertConditionRepositoryInterface):
@@ -69,12 +102,24 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
         )
         return [self._to_domain(row) for row in self.db.scalars(statement)]
 
-    def list(self) -> list[CustomAlertConditionRecord]:
-        return list(self.db.scalars(select(CustomAlertConditionRecord).order_by(CustomAlertConditionRecord.id)))
+    def list(self, owner_id: str) -> list[CustomAlertConditionRecord]:
+        statement = (
+            select(CustomAlertConditionRecord)
+            .join(
+                WatchlistSubscription,
+                CustomAlertConditionRecord.subscription_id == WatchlistSubscription.id,
+            )
+            .where(WatchlistSubscription.owner_id == owner_id)
+            .where(WatchlistSubscription.ended_at.is_(None))
+            .where(CustomAlertConditionRecord.ended_at.is_(None))
+            .order_by(CustomAlertConditionRecord.id)
+        )
+        return list(self.db.scalars(statement))
 
     def save_validated(
         self,
         *,
+        owner_id: str,
         symbol: str,
         user_rule: str,
         validation: RuleValidationResult,
@@ -83,7 +128,17 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
             raise ValueError("only valid alert conditions can be saved")
 
         normalized = normalize_symbol(symbol)
+        subscription = self.db.scalar(
+            select(WatchlistSubscription).where(
+                WatchlistSubscription.owner_id == owner_id,
+                WatchlistSubscription.symbol == normalized,
+                WatchlistSubscription.ended_at.is_(None),
+            )
+        )
+        if subscription is None:
+            raise LookupError("active watchlist subscription not found")
         record = CustomAlertConditionRecord(
+            subscription_id=subscription.id,
             symbol=normalized,
             name=validation.normalized_name,
             user_rule=user_rule.strip(),
@@ -100,8 +155,9 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
             self.db.rollback()
             existing = self.db.scalar(
                 select(CustomAlertConditionRecord).where(
-                    CustomAlertConditionRecord.symbol == normalized,
+                    CustomAlertConditionRecord.subscription_id == subscription.id,
                     CustomAlertConditionRecord.user_rule == user_rule.strip(),
+                    CustomAlertConditionRecord.ended_at.is_(None),
                 )
             )
             if existing is not None:
@@ -110,11 +166,24 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
         self.db.refresh(record)
         return record
 
-    def delete(self, condition_id: int) -> bool:
-        record = self.db.get(CustomAlertConditionRecord, condition_id)
+    def delete(self, owner_id: str, condition_id: int) -> bool:
+        record = self.db.scalar(
+            select(CustomAlertConditionRecord)
+            .join(
+                WatchlistSubscription,
+                CustomAlertConditionRecord.subscription_id == WatchlistSubscription.id,
+            )
+            .where(
+                CustomAlertConditionRecord.id == condition_id,
+                CustomAlertConditionRecord.ended_at.is_(None),
+                WatchlistSubscription.owner_id == owner_id,
+                WatchlistSubscription.ended_at.is_(None),
+            )
+        )
         if record is None:
             return False
-        self.db.delete(record)
+        record.end(datetime.now(timezone.utc))
+        self.db.add(record)
         self.db.commit()
         return True
 
@@ -143,6 +212,7 @@ class AnalysisRepository(AnalysisRepositoryInterface):
         statement = (
             select(AnalysisResult)
             .where(AnalysisResult.symbol == normalized)
+            .where(AnalysisResult.shared_safe.is_(True))
             .order_by(AnalysisResult.analyzed_at.desc(), AnalysisResult.id.desc())
             .limit(1)
         )
@@ -159,6 +229,7 @@ class AnalysisRepository(AnalysisRepositoryInterface):
         statement = (
             select(AnalysisResult)
             .where(AnalysisResult.symbol == normalized)
+            .where(AnalysisResult.shared_safe.is_(True))
             .order_by(AnalysisResult.analyzed_at.desc(), AnalysisResult.id.desc())
             .offset(offset)
             .limit(limit)
@@ -171,6 +242,7 @@ class AnalysisRepository(AnalysisRepositoryInterface):
             select(AnalysisResult)
             .where(AnalysisResult.symbol == normalized)
             .where(AnalysisResult.id == result_id)
+            .where(AnalysisResult.shared_safe.is_(True))
         )
         return self.db.scalar(statement)
 
@@ -201,6 +273,7 @@ class AnalysisRepository(AnalysisRepositoryInterface):
             triggered_alerts=triggered_alerts or [],
             alert_reason=alert_reason,
             raw_result=raw_result,
+            shared_safe=True,
         )
         self.db.add(result)
         self.db.commit()
@@ -232,5 +305,10 @@ class AnalysisRepository(AnalysisRepositoryInterface):
 
     def count_by_symbol(self, symbol: str) -> int:
         normalized = normalize_symbol(symbol)
-        rows = self.db.scalars(select(AnalysisResult).where(AnalysisResult.symbol == normalized))
+        rows = self.db.scalars(
+            select(AnalysisResult).where(
+                AnalysisResult.symbol == normalized,
+                AnalysisResult.shared_safe.is_(True),
+            )
+        )
         return sum(1 for _ in rows)

@@ -28,6 +28,7 @@ def test_watchlist_crud(client):
 
 
 def test_custom_alert_condition_is_validated_and_saved(client, rule_validation_agent):
+    client.post("/watchlist", json={"symbol": "005930.KS"})
     response = client.post(
         "/alert-conditions",
         json={
@@ -67,7 +68,8 @@ def test_custom_alert_condition_rejection_returns_rewrite_guidance(client, rule_
     assert response.json()["detail"]["rewrite_guidance"] == "Name a symbol and measurable trigger."
 
 
-def test_analysis_receives_enabled_custom_conditions(client, agent):
+def test_shared_analysis_does_not_receive_user_custom_conditions(client, agent):
+    client.post("/watchlist", json={"symbol": "005930.KS"})
     client.post(
         "/alert-conditions",
         json={
@@ -80,7 +82,7 @@ def test_analysis_receives_enabled_custom_conditions(client, agent):
 
     assert response.status_code == 200
     condition_ids = [condition.id for condition in agent.alert_conditions[0]]
-    assert "custom.1" in condition_ids
+    assert "custom.1" not in condition_ids
     assert "price_move_abs_gte_3_percent" in condition_ids
 
 
@@ -127,7 +129,7 @@ def test_manual_analysis_always_creates_fresh_result(
     assert alert_notifier.messages == []
 
 
-def test_latest_analysis_sends_pending_alert_for_cached_result(client, db_session, alert_notifier):
+def test_latest_analysis_does_not_send_pending_user_notification(client, db_session, alert_notifier):
     AnalysisRepository(db_session).save(
         symbol="005930.KS",
         overall_judgment="상승",
@@ -144,15 +146,15 @@ def test_latest_analysis_sends_pending_alert_for_cached_result(client, db_sessio
     response = client.get("/stocks/005930.KS/analysis/latest")
 
     assert response.status_code == 200
-    assert alert_notifier.messages == ["캐시된 알림 사유입니다."]
+    assert alert_notifier.messages == []
     stored = AnalysisRepository(db_session).get_latest("005930.KS")
-    assert stored.alert_sent_at is not None
+    assert stored.alert_sent_at is None
 
     client.get("/stocks/005930.KS/analysis/latest")
-    assert alert_notifier.messages == ["캐시된 알림 사유입니다."]
+    assert alert_notifier.messages == []
 
 
-def test_latest_analysis_sends_kakao_alert_reason_only_when_alert_triggered(
+def test_latest_analysis_does_not_send_runtime_notification_when_system_signal_triggers(
     client, agent, alert_notifier
 ):
     agent.result = AnalysisResult(
@@ -172,7 +174,7 @@ def test_latest_analysis_sends_kakao_alert_reason_only_when_alert_triggered(
     response = client.get("/stocks/005930.KS/analysis/latest")
 
     assert response.status_code == 200
-    assert alert_notifier.messages == ["주가가 10% 이상 급등했습니다."]
+    assert alert_notifier.messages == []
 
 
 def test_latest_analysis_does_not_send_kakao_when_alert_not_triggered(client, alert_notifier):

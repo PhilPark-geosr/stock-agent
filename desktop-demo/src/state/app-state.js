@@ -86,9 +86,9 @@ function selectedStockView() {
     volumeRatio: indicators.volume_ratio_20 == null ? "-" : `${asNumber(indicators.volume_ratio_20).toFixed(2)}x`,
     low20: indicators.low_20 == null ? "-" : new Intl.NumberFormat("ko-KR").format(asNumber(indicators.low_20)),
     high20: indicators.high_20 == null ? "-" : new Intl.NumberFormat("ko-KR").format(asNumber(indicators.high_20)),
-    alertStatus: analysis.shouldAlert ? "전송 대상" : "조건 미충족",
-    alertDetail: analysis.alertReason,
-    matchedAlerts: analysis.triggeredAlerts,
+    alertStatus: "평가 중단",
+    alertDetail: "사용자별 알림 평가·발송은 다음 설계 단계에서 활성화됩니다.",
+    matchedAlerts: [],
     dataTime: formatDate(analysis.dataTimestamp),
     analyses: state.analysisHistory
   };

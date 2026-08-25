@@ -6,20 +6,24 @@ from datetime import datetime
 from typing import Any, Protocol
 
 from app.domain.alert_conditions import CustomAlertCondition, RuleValidationResult
-from app.domain.models import AnalysisResult, CustomAlertConditionRecord, WatchlistItem
+from app.domain.models import AnalysisResult, CustomAlertConditionRecord, WatchlistSubscription
+from app.domain.symbols import StockSymbol
 
 
 class WatchlistRepository(Protocol):
-    def list(self) -> list[WatchlistItem]:
+    def list(self, owner_id: str) -> list[WatchlistSubscription]:
         ...
 
-    def get(self, symbol: str) -> WatchlistItem | None:
+    def get(self, owner_id: str, symbol: StockSymbol) -> WatchlistSubscription | None:
         ...
 
-    def add(self, symbol: str) -> WatchlistItem:
+    def add(self, owner_id: str, symbol: StockSymbol) -> WatchlistSubscription:
         ...
 
-    def delete(self, symbol: str) -> bool:
+    def delete(self, owner_id: str, symbol: StockSymbol) -> bool:
+        ...
+
+    def list_distinct_active_symbols(self) -> list[StockSymbol]:
         ...
 
 
@@ -27,19 +31,20 @@ class AlertConditionRepository(Protocol):
     def list_enabled_for_symbol(self, symbol: str) -> list[CustomAlertCondition]:
         ...
 
-    def list(self) -> list[CustomAlertConditionRecord]:
+    def list(self, owner_id: str) -> list[CustomAlertConditionRecord]:
         ...
 
     def save_validated(
         self,
         *,
+        owner_id: str,
         symbol: str,
         user_rule: str,
         validation: RuleValidationResult,
     ) -> CustomAlertConditionRecord:
         ...
 
-    def delete(self, condition_id: int) -> bool:
+    def delete(self, owner_id: str, condition_id: int) -> bool:
         ...
 
 
