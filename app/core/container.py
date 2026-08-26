@@ -2,26 +2,33 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import Callable
 
+from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 
 from app.application.analysis_graph import MainAnalysisAgent
 from app.application.custom_rule_agent import CustomRuleAgent, LangGraphCustomRuleAgent
+from app.application.system_alerts import NoOpSystemAlertDispatcher, SystemAlertDispatcher
 from app.core.scheduler_config import scheduler_settings
 from app.core.trading_window import is_alert_window
-from app.integrations.kakao_notify import get_default_alert_notifier
 from app.integrations.llm.gemini_analysis_agent import GeminiAnalysisAgent
 from app.integrations.yfinance_market_data_provider import YFinanceMarketDataProvider
 from app.interfaces.analysis import AnalysisAgent
 from app.interfaces.market_data import MarketDataProvider
-from app.interfaces.notifications import AlertNotifier
 from app.repositories import (
     AnalysisRepository as SqlAlchemyAnalysisRepository,
     WatchlistRepository as SqlAlchemyWatchlistRepository,
 )
 from app.services import AnalysisService
+from app.integrations.kakao_auth import kakao_settings
+from app.integrations.kakao_notify import KakaoNotificationSender
+from app.repositories.notifications import (
+    SqlAlchemyNotificationConnectionRepository,
+    SqlAlchemyNotificationDeliveryRepository,
+)
 
 
 def build_alert_window_checker() -> Callable[[datetime], bool]:
@@ -42,16 +49,41 @@ def build_analysis_service(
     *,
     market_data_provider: MarketDataProvider | None = None,
     agent: AnalysisAgent | None = None,
-    alert_notifier: AlertNotifier | None = None,
     alert_window_checker: Callable[[datetime], bool] | None = None,
     now_provider: Callable[[], datetime] | None = None,
+    system_alert_dispatcher=None,
 ) -> AnalysisService:
+    dispatcher = system_alert_dispatcher or build_system_alert_dispatcher(db)
     return AnalysisService(
         analysis_repository=SqlAlchemyAnalysisRepository(db),
         watchlist_repository=SqlAlchemyWatchlistRepository(db),
         market_data_provider=market_data_provider or get_market_data_provider(),
         agent=agent or get_analysis_agent(),
+        system_alert_dispatcher=dispatcher,
         now_provider=now_provider,
+    )
+
+
+def build_system_alert_dispatcher(db: Session):
+    key = os.getenv("NOTIFICATION_TOKEN_FERNET_KEY")
+    settings = kakao_settings()
+    if not key or not settings["rest_api_key"]:
+        return NoOpSystemAlertDispatcher()
+    try:
+        cipher = Fernet(key.encode())
+    except (ValueError, TypeError):
+        return NoOpSystemAlertDispatcher()
+
+    connections = SqlAlchemyNotificationConnectionRepository(db, cipher)
+    return SystemAlertDispatcher(
+        watchlist_repository=SqlAlchemyWatchlistRepository(db),
+        connection_repository=connections,
+        delivery_repository=SqlAlchemyNotificationDeliveryRepository(db),
+        sender=KakaoNotificationSender(
+            connections,
+            rest_api_key=str(settings["rest_api_key"]),
+            client_secret=settings["client_secret"],
+        ),
     )
 
 
@@ -69,6 +101,9 @@ def get_analysis_agent() -> AnalysisAgent:
         custom_rule_agent=get_default_custom_rule_agent(),
     )
 
-
-def get_alert_notifier() -> AlertNotifier:
-    return get_default_alert_notifier()
+__all__ = [
+    "build_analysis_service",
+    "build_system_alert_dispatcher",
+    "get_analysis_agent",
+    "get_market_data_provider",
+]

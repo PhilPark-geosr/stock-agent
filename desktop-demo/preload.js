@@ -35,5 +35,10 @@ contextBridge.exposeInMainWorld("desktop", {
       ipcRenderer.on("auth:expired", handler);
       return () => ipcRenderer.removeListener("auth:expired", handler);
     }
+  },
+  notifications: {
+    connect: () => ipcRenderer.invoke("notifications:connect"),
+    status: () => ipcRenderer.invoke("notifications:status"),
+    disconnect: () => ipcRenderer.invoke("notifications:disconnect")
   }
 });

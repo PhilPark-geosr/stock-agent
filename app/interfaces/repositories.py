@@ -6,7 +6,13 @@ from datetime import datetime
 from typing import Any, Protocol
 
 from app.domain.alert_conditions import CustomAlertCondition, RuleValidationResult
-from app.domain.models import AnalysisResult, CustomAlertConditionRecord, WatchlistSubscription
+from app.domain.models import (
+    AnalysisResult,
+    CustomAlertConditionRecord,
+    NotificationDeliveryRecord,
+    WatchlistSubscription,
+)
+from app.domain.notifications import NotificationConnection, NotificationCredentials
 from app.domain.symbols import StockSymbol
 
 
@@ -24,6 +30,9 @@ class WatchlistRepository(Protocol):
         ...
 
     def list_distinct_active_symbols(self) -> list[StockSymbol]:
+        ...
+
+    def list_active_for_symbol(self, symbol: StockSymbol | str) -> list[WatchlistSubscription]:
         ...
 
 
@@ -69,11 +78,63 @@ class AnalysisRepository(Protocol):
     ) -> AnalysisResult:
         ...
 
-    def mark_alert_sent(self, result: AnalysisResult) -> AnalysisResult:
-        ...
-
-    def has_sent_alert_for_conditions(self, symbol: str, triggered_alerts: list[str]) -> bool:
-        ...
-
     def count_by_symbol(self, symbol: str) -> int:
+        ...
+
+
+class NotificationConnectionRepository(Protocol):
+    def get_active(
+        self,
+        *,
+        owner_id: str,
+        channel: str,
+    ) -> NotificationConnection | None:
+        ...
+
+    def create(
+        self,
+        *,
+        owner_id: str,
+        channel: str,
+        credentials: NotificationCredentials,
+    ) -> NotificationConnection:
+        ...
+
+    def get_credentials(
+        self,
+        connection_id: str,
+    ) -> NotificationCredentials:
+        ...
+
+    def update_credentials(
+        self,
+        connection_id: str,
+        credentials: NotificationCredentials,
+    ) -> None:
+        ...
+
+    def disconnect(self, connection_id: str) -> bool:
+        ...
+
+
+class NotificationDeliveryRepository(Protocol):
+    def reserve_default_alert(
+        self,
+        *,
+        recipient_id: str,
+        analysis_id: int,
+        connection_id: str,
+        message: str,
+    ):
+        ...
+
+    def mark_sent(self, delivery_id: int) -> NotificationDeliveryRecord:
+        ...
+
+    def mark_failed(
+        self,
+        delivery_id: int,
+        *,
+        reason: str,
+    ) -> NotificationDeliveryRecord:
         ...

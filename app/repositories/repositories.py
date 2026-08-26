@@ -87,6 +87,14 @@ class WatchlistRepository(WatchlistRepositoryInterface):
         )
         return [StockSymbol.of(symbol) for symbol in self.db.scalars(statement)]
 
+    def list_active_for_symbol(self, symbol: StockSymbol | str) -> list[WatchlistSubscription]:
+        value = symbol.value if isinstance(symbol, StockSymbol) else normalize_symbol(symbol)
+        return list(self.db.scalars(select(WatchlistSubscription).where(
+            WatchlistSubscription.symbol == value,
+            WatchlistSubscription.owner_id.is_not(None),
+            WatchlistSubscription.ended_at.is_(None),
+        ).order_by(WatchlistSubscription.id)))
+
 
 class AlertConditionRepository(AlertConditionRepositoryInterface):
     def __init__(self, db: Session) -> None:
@@ -279,29 +287,6 @@ class AnalysisRepository(AnalysisRepositoryInterface):
         self.db.commit()
         self.db.refresh(result)
         return result
-
-    def mark_alert_sent(self, result: AnalysisResult) -> AnalysisResult:
-        result.alert_sent_at = datetime.now(timezone.utc)
-        self.db.add(result)
-        self.db.commit()
-        self.db.refresh(result)
-        return result
-
-    def has_sent_alert_for_conditions(self, symbol: str, triggered_alerts: list[str]) -> bool:
-        normalized = normalize_symbol(symbol)
-        conditions_key = tuple(sorted(triggered_alerts or []))
-        if not conditions_key:
-            return False
-
-        statement = (
-            select(AnalysisResult)
-            .where(AnalysisResult.symbol == normalized)
-            .where(AnalysisResult.alert_sent_at.is_not(None))
-        )
-        for row in self.db.scalars(statement):
-            if tuple(sorted(row.triggered_alerts or [])) == conditions_key:
-                return True
-        return False
 
     def count_by_symbol(self, symbol: str) -> int:
         normalized = normalize_symbol(symbol)

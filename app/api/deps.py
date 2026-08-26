@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import os
+
+from cryptography.fernet import Fernet
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.container import (
     build_analysis_service,
-    get_alert_notifier,
     get_analysis_agent,
     get_market_data_provider,
 )
@@ -30,6 +32,8 @@ from app.repositories.auth import SqlAlchemyAuthSessionRepository, SqlAlchemyLog
 from app.repositories.auth import SqlAlchemyUserAccountRepository
 from app.application.auth_sessions import AttemptUnauthorized
 from app.domain.auth import UserAccount
+from app.repositories.notifications import SqlAlchemyNotificationConnectionRepository
+from app.application.notification_connections import KakaoNotificationConnectionService
 
 
 bearer = HTTPBearer(auto_error=False)
@@ -97,3 +101,46 @@ def get_login_service(db: Session = Depends(get_db)) -> LoginService:
         client_secret=settings["client_secret"],
     )
     return LoginService(external_login, SqlAlchemyUserAccountRepository(db))
+
+
+def get_notification_connection_repository(
+    db: Session = Depends(get_db),
+):
+    key = os.getenv("NOTIFICATION_TOKEN_FERNET_KEY")
+    if not key:
+        raise HTTPException(
+            status_code=503,
+            detail="notification token encryption is not configured",
+        )
+    try:
+        cipher = Fernet(key.encode())
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="notification token encryption key is invalid",
+        ) from exc
+    return SqlAlchemyNotificationConnectionRepository(db, cipher)
+
+
+def get_notification_connection_service(
+    repository=Depends(get_notification_connection_repository),
+):
+    settings = kakao_settings()
+    rest_api_key = settings["rest_api_key"]
+    if not rest_api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="KAKAO_REST_API_KEY is required",
+        )
+    redirect_uri = os.getenv(
+        "KAKAO_NOTIFICATION_REDIRECT_URI",
+        "http://127.0.0.1:8000/notification-connections/kakao/callback",
+    )
+    key = os.environ["NOTIFICATION_TOKEN_FERNET_KEY"]
+    return KakaoNotificationConnectionService(
+        repository,
+        rest_api_key=rest_api_key,
+        redirect_uri=redirect_uri,
+        state_cipher=Fernet(key.encode()),
+        client_secret=settings["client_secret"],
+    )

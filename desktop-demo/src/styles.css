@@ -129,6 +129,8 @@ h1 { margin: 0; font-size: 27px; letter-spacing: -.6px; }
 .search-form input { width: 100%; border: 0; outline: 0; color: #17332c; background: transparent; font-size: 12px; }
 .primary-button { height: 43px; padding: 0 16px; border: 0; border-radius: 12px; color: #17332c; background: #d8f36a; font-size: 12px; font-weight: 800; }
 .primary-button:hover { background: #cce95a; }
+.secondary-button { height: 43px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--surface); font-size: 12px; font-weight: 800; }
+.secondary-button:hover { border-color: var(--muted); }
 
 .workspace-grid { display: grid; grid-template-columns: 252px minmax(0, 1fr); gap: 22px; align-items: start; }
 .card { border: 1px solid #dce5e1; border-radius: 17px; background: #fff; box-shadow: 0 6px 18px rgba(25,66,55,.035); }

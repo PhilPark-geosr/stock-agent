@@ -14,16 +14,17 @@
 카카오 Developers에서 애플리케이션을 선택한 뒤 다음을 설정합니다.
 
 1. **카카오 로그인**을 활성화합니다.
-2. REST API 키의 **카카오 로그인 Redirect URI**에 아래 주소를 정확히 등록합니다.
+2. REST API 키의 **카카오 로그인 Redirect URI**에 로그인과 알림 연결용 주소를 모두 정확히 등록합니다.
 
    ```text
    http://127.0.0.1:8000/auth/kakao/callback
+   http://127.0.0.1:8000/notification-connections/kakao/callback
    ```
 
 3. REST API 키를 복사합니다.
 4. 클라이언트 시크릿을 활성화한 경우에만 해당 값을 함께 복사합니다.
 
-이번 로그인은 카카오 회원번호로 서비스 사용자를 식별할 뿐이며 이메일, 프로필, `talk_message` 동의항목을 요청하지 않습니다. `localhost`와 `127.0.0.1`, 포트, 경로 및 마지막 슬래시는 서로 다른 Redirect URI로 취급되므로 `.env`와 카카오 콘솔의 값을 완전히 일치시켜야 합니다.
+서비스 로그인은 카카오 회원번호만 확인하고 `talk_message`를 요청하지 않습니다. 로그인 뒤 사용자가 별도로 **카카오 알림 연결**을 선택할 때만 `talk_message` 추가 동의를 요청합니다. `localhost`와 `127.0.0.1`, 포트, 경로 및 마지막 슬래시는 서로 다른 Redirect URI로 취급되므로 `.env`와 카카오 콘솔의 값을 완전히 일치시켜야 합니다.
 
 ## 설치 및 환경변수
 
@@ -41,13 +42,23 @@ DATABASE_URL=sqlite:///./stock_agent.db
 
 KAKAO_REST_API_KEY=your-kakao-rest-api-key
 KAKAO_REDIRECT_URI=http://127.0.0.1:8000/auth/kakao/callback
+KAKAO_NOTIFICATION_REDIRECT_URI=http://127.0.0.1:8000/notification-connections/kakao/callback
 KAKAO_CLIENT_SECRET=
+NOTIFICATION_TOKEN_FERNET_KEY=generated-fernet-key
 ```
 
 - `KAKAO_REST_API_KEY`는 필수입니다.
 - `KAKAO_CLIENT_SECRET`은 카카오 콘솔에서 시크릿을 활성화했을 때만 입력합니다.
+- `KAKAO_NOTIFICATION_REDIRECT_URI`는 카카오 콘솔에 별도로 등록한 알림 연결 callback과 정확히 같아야 합니다.
+- `NOTIFICATION_TOKEN_FERNET_KEY`는 카카오 알림 access/refresh token 암호화에 필수입니다. 누락되면 로그인과 분석은 계속 동작하지만 알림 연결 API만 503을 반환합니다.
 - `KAKAO_ACCESS_TOKEN`, `KAKAO_REFRESH_TOKEN`은 서비스 로그인 설정이 아닙니다. 로그인 과정에서 받은 카카오 토큰은 회원번호 확인 후 저장하지 않습니다.
 - 서버 시작 시 Alembic 마이그레이션이 자동으로 최신 리비전까지 적용됩니다.
+
+Fernet 키는 한 번 생성해 안전하게 보관하고, 이미 저장된 토큰이 있는 상태에서 임의로 교체하지 않습니다.
+
+```powershell
+uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
 
 ## 실행
 
@@ -88,9 +99,10 @@ npm start
 - 같은 종목의 분석은 사용자별로 복제하지 않고 공용으로 생성합니다.
 - 사용자는 자신이 활성 구독한 종목의 안전한 공유 분석만 조회하거나 수동 실행할 수 있습니다.
 - 공유 분석에는 시스템 시장 조건만 사용하며 사용자 알림 조건은 저장·조회·종료까지만 제공합니다.
-- 사용자별 조건 평가, `NotificationConnection`과 런타임 알림 발송은 후속 설계 범위입니다.
+- 스케줄 분석에서 시스템 신호가 발생하면 활성 구독자 중 카카오 알림을 연결한 사용자에게 기본 알림 한 건을 발송하고 사용자별 성공·실패 이력을 기록합니다.
+- 사용자별 조건 평가는 후속 설계 범위입니다.
 
-따라서 이번 서비스 로그인에는 `talk_message` 권한이나 카카오 메시지 토큰이 필요하지 않습니다.
+서비스 로그인 자체에는 `talk_message` 권한이나 메시지 토큰이 필요하지 않으며, 알림 연결은 로그인과 별도의 동의·생명주기를 가집니다.
 
 ## 주요 API
 
@@ -100,6 +112,9 @@ npm start
 - `POST /auth/login-attempts/{attempt_id}/exchange` — 완료된 로그인 시도를 서비스 세션으로 교환
 - `GET /auth/session`, `DELETE /auth/session` — 현재 세션 확인 및 로그아웃
 - `GET /auth/kakao/callback` — 카카오 인가 콜백
+- `POST /notification-connections/kakao/authorize` — 카카오 알림 추가 동의 시작
+- `GET`, `DELETE /notification-connections/kakao` — 현재 사용자의 알림 연결 조회·해제
+- `GET /notification-connections/kakao/callback` — 카카오 알림 연결 콜백
 - `GET`, `POST`, `DELETE /watchlist` — 현재 사용자 관심 종목 구독 관리
 - `GET`, `POST`, `DELETE /alert-conditions` — 현재 사용자 알림 조건 관리
 - `GET /stocks/{symbol}/analysis`, `GET /stocks/{symbol}/analysis/latest` — 구독 종목의 공유 분석 조회
