@@ -3,7 +3,7 @@ const {
   AlertConditionsPanel, renderWatchlist, renderAnalysis, renderHistory, renderAlertConditions,
   showToast, showDialog, bindDialogEvents, state, emptyAnalysis, errorMessage,
   selectedStockView, createBackendService, createAnalysisController, createWatchlistController,
-  createAlertsController, createAuthController, bindNavigationEvents, showView
+  createAlertsController, createAuthController, createNotificationController, bindNavigationEvents, showView
 } = window.StockAgent;
 
 const backend = createBackendService();
@@ -69,6 +69,8 @@ async function initializeApplication(account) {
   watchlistController.bindWatchlistEvents();
   analysisController.bindAnalysisEvents();
   alertsController.bindAlertsEvents();
+  const notificationController=createNotificationController({ notifications: window.desktop.notifications, showToast });
+  notificationController.bind();
   document.querySelector("#logout-button").addEventListener("click", () => authController.logout().catch((error) => showToast(errorMessage(error))));
   updateAccountMenu(account);
 
@@ -77,6 +79,7 @@ async function initializeApplication(account) {
     document.querySelector("#backend-connection").textContent = "BACKEND 연결됨";
     document.querySelector("#backend-detail").textContent = connection.baseUrl;
     await Promise.all([watchlistController.loadWatchlist(), alertsController.loadAlertConditions()]);
+    await notificationController.refresh();
     document.querySelector("#alert-symbol-input").value = state.selectedSymbol || "";
   } catch (error) {
     document.querySelector("#backend-connection").textContent = "BACKEND 연결 실패";

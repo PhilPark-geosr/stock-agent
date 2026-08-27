@@ -148,7 +148,7 @@ def test_latest_analysis_does_not_send_pending_user_notification(client, db_sess
     assert response.status_code == 200
     assert alert_notifier.messages == []
     stored = AnalysisRepository(db_session).get_latest("005930.KS")
-    assert stored.alert_sent_at is None
+    assert stored.should_alert is True
 
     client.get("/stocks/005930.KS/analysis/latest")
     assert alert_notifier.messages == []

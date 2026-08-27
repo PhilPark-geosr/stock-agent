@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.api.deps import get_alert_notifier, get_analysis_agent, get_analysis_service, get_market_data_provider
+from app.api.deps import get_analysis_agent, get_analysis_service, get_market_data_provider
 from app.core.container import build_analysis_service
 from app.core.database import Base, get_db
 from app.domain import models  # noqa: F401
@@ -162,7 +162,6 @@ def client(
             db_session,
             market_data_provider=market_data,
             agent=agent,
-            alert_notifier=alert_notifier,
             alert_window_checker=lambda now: True,
             now_provider=lambda: ALERT_WINDOW_UTC,
         )
@@ -170,7 +169,6 @@ def client(
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_market_data_provider] = lambda: market_data
     app.dependency_overrides[get_analysis_agent] = lambda: agent
-    app.dependency_overrides[get_alert_notifier] = lambda: alert_notifier
     from app.api.routes import get_rule_validation_agent
     from app.api.deps import get_current_account
 

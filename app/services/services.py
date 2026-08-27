@@ -55,12 +55,14 @@ class AnalysisService:
         watchlist_repository: WatchlistRepository,
         market_data_provider: MarketDataProvider,
         agent: AnalysisAgent,
+        system_alert_dispatcher,
         now_provider: Callable[[], datetime] | None = None,
     ) -> None:
         self.analysis_repository = analysis_repository
         self.watchlist_repository = watchlist_repository
         self.market_data_provider = market_data_provider
         self.agent = agent
+        self.system_alert_dispatcher = system_alert_dispatcher
         self.now_provider = now_provider or (lambda: datetime.now(timezone.utc))
 
     def get_latest_analysis(self, symbol: str) -> StoredAnalysisResult:
@@ -174,6 +176,11 @@ class AnalysisService:
             try:
                 stored = self.analyze_and_store(symbol.value)
                 analyzed.append(symbol.value)
+                try:
+                    dispatch_result = self.system_alert_dispatcher.dispatch(stored)
+                    logger.info("System alert dispatch symbol=%s sent=%d failed=%d", symbol.value, dispatch_result.sent, dispatch_result.failed)
+                except Exception:
+                    logger.exception("System alert dispatch failed after analysis was stored for %s", symbol.value)
             except Exception:
                 logger.exception("Scheduled analysis failed for %s", symbol.value)
                 failed.append(symbol.value)

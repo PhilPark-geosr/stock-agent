@@ -1,10 +1,13 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
 from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
 
 from app.api.deps import (
     get_alert_condition_repository,
@@ -16,11 +19,15 @@ from app.api.deps import (
     get_session_service,
     get_login_service,
     get_current_account,
+    get_notification_connection_repository,
+    get_notification_connection_service,
 )
 from app.application.auth_sessions import AttemptExpired, AttemptNotFound, AttemptPending, AttemptUnauthorized, LoginAttemptService, SessionService
 from app.application.login import LoginService
 from app.domain.auth import ExternalLoginCredential
 from app.domain.auth import UserAccount
+from app.domain.models import UserAccountRecord
+from app.application.notification_connections import NotificationConnectionError
 from app.domain.symbols import StockSymbol
 from app.application.custom_rule_agent import CustomRuleAgentError
 from app.integrations.kakao_auth import (
@@ -120,6 +127,62 @@ def delete_auth_session(credentials: HTTPAuthorizationCredentials | None = Depen
     except AttemptUnauthorized as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/notification-connections/kakao/authorize")
+def authorize_kakao_notification(
+    account: UserAccount = Depends(get_current_account),
+    service=Depends(get_notification_connection_service),
+):
+    return {"authorization_url": service.authorize(account.id)}
+
+
+@router.get("/notification-connections/kakao")
+def get_kakao_notification_connection(
+    account: UserAccount = Depends(get_current_account),
+    repository=Depends(get_notification_connection_repository),
+):
+    connection = repository.get_active(owner_id=account.id, channel="kakao")
+    return {
+        "connected": connection is not None,
+        "connection_id": connection.id if connection else None,
+    }
+
+
+@router.delete("/notification-connections/kakao", status_code=status.HTTP_204_NO_CONTENT)
+def delete_kakao_notification_connection(
+    account: UserAccount = Depends(get_current_account),
+    repository=Depends(get_notification_connection_repository),
+):
+    connection = repository.get_active(owner_id=account.id, channel="kakao")
+    if connection:
+        repository.disconnect(connection.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/notification-connections/kakao/callback", response_class=HTMLResponse)
+def complete_kakao_notification_connection(
+    request: Request,
+    code: str,
+    state_value: str = Query(alias="state"),
+    service=Depends(get_notification_connection_service),
+    db: Session = Depends(get_db),
+):
+    try:
+        owner_id = service.owner_id_from_state(state_value)
+        account = db.get(UserAccountRecord, owner_id)
+        if account is None or account.login_provider != "kakao":
+            raise NotificationConnectionError(
+                "matching Kakao login identity not found"
+            )
+        service.complete(
+            code=code,
+            state=state_value,
+            expected_subject_id=account.provider_subject_id,
+        )
+    except NotificationConnectionError as exc:
+        return HTMLResponse(f"알림 연결에 실패했습니다: {exc}", status_code=400)
+    return HTMLResponse("알림 연결이 완료되었습니다. 앱으로 돌아가세요.")
 
 
 @router.get("/", response_class=HTMLResponse)

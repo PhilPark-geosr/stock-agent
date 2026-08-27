@@ -45,7 +45,6 @@ def test_run_scheduled_batch_accumulates_results(db_session, market_data, agent,
         db_session,
         market_data_provider=market_data,
         agent=agent,
-        alert_notifier=alert_notifier,
         alert_window_checker=lambda now: True,
         now_provider=lambda: ALERT_WINDOW_UTC,
     )
@@ -74,7 +73,6 @@ def test_run_scheduled_batch_skips_outside_market_hours(db_session, market_data,
         db_session,
         market_data_provider=market_data,
         agent=agent,
-        alert_notifier=alert_notifier,
         alert_window_checker=lambda now: True,
     )
     outside = datetime(2026, 6, 2, 7, 0, tzinfo=KST)
@@ -93,7 +91,6 @@ def test_run_scheduled_batch_skips_outside_market_hours(db_session, market_data,
 def test_run_scheduled_batch_empty_watchlist(db_session, alert_notifier):
     service = build_analysis_service(
         db_session,
-        alert_notifier=alert_notifier,
         alert_window_checker=lambda now: True,
     )
     result = run_scheduled_batch(service, ignore_market_hours=True, now=ALERT_WINDOW_UTC)
@@ -103,7 +100,7 @@ def test_run_scheduled_batch_empty_watchlist(db_session, alert_notifier):
     assert result.skipped_reason == "empty_watchlist"
 
 
-def test_scheduler_does_not_send_user_notifications(db_session, market_data, alert_notifier):
+def test_scheduler_without_notification_connection_keeps_analysis_successful(db_session, market_data, alert_notifier):
     subscribe(db_session)
     from app.schemas import AnalysisResult
 
@@ -126,7 +123,6 @@ def test_scheduler_does_not_send_user_notifications(db_session, market_data, ale
         db_session,
         market_data_provider=market_data,
         agent=agent,
-        alert_notifier=alert_notifier,
         alert_window_checker=lambda now: True,
         now_provider=lambda: ALERT_WINDOW_UTC,
     )
@@ -153,7 +149,6 @@ def test_scheduler_run_endpoint(client, db_session, market_data, agent, alert_no
         db_session,
         market_data_provider=market_data,
         agent=agent,
-        alert_notifier=alert_notifier,
         alert_window_checker=lambda now: True,
         now_provider=lambda: ALERT_WINDOW_UTC,
     )

@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { createAuthenticatedRequester, createSessionStore } = require("./lib/auth-session");
 const { createLoginFlow } = require("./lib/login-flow");
+const { createNotificationFlow } = require("./lib/notification-flow");
 
 const API_BASE_URL = process.env.STOCK_AGENT_API_URL || "http://127.0.0.1:8000";
 const repositoryRoot = path.resolve(__dirname, "..");
@@ -12,6 +13,7 @@ let mainWindow = null;
 let sessionStore = null;
 let authenticatedRequest = null;
 let loginFlow = null;
+let notificationFlow = null;
 
 function pythonCommand() {
   const candidates = process.platform === "win32"
@@ -109,6 +111,7 @@ function initializeAuthentication() {
     openExternal: (url) => shell.openExternal(url),
     sessionStore
   });
+  notificationFlow = createNotificationFlow({ request: requestBackend, openExternal: (url) => shell.openExternal(url) });
 }
 
 async function restoreSession() {
@@ -141,6 +144,9 @@ function registerBackendHandlers() {
   ipcMain.handle("auth:restore", restoreSession);
   ipcMain.handle("auth:login", () => loginFlow.login());
   ipcMain.handle("auth:logout", logout);
+  ipcMain.handle("notifications:connect", () => notificationFlow.connect());
+  ipcMain.handle("notifications:status", () => notificationFlow.status());
+  ipcMain.handle("notifications:disconnect", () => notificationFlow.disconnect());
 }
 
 function createWindow() {

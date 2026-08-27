@@ -92,9 +92,36 @@ class AnalysisResult(Base):
     should_alert: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     triggered_alerts: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     alert_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     raw_result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     shared_safe: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+class NotificationConnectionRecord(Base):
+    __tablename__ = "notification_connections"
+    __table_args__ = (Index("uq_notification_connections_active_owner_channel", "owner_id", "channel", unique=True,
+        sqlite_where=text("disconnected_at IS NULL"), postgresql_where=text("disconnected_at IS NULL")),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("user_accounts.id"), nullable=False, index=True)
+    channel: Mapped[str] = mapped_column(String(32), nullable=False)
+    encrypted_access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    encrypted_refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    refresh_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    disconnected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+class NotificationDeliveryRecord(Base):
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (UniqueConstraint("recipient_id", "analysis_id", "kind", name="uq_notification_delivery_recipient_analysis_kind"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recipient_id: Mapped[str] = mapped_column(ForeignKey("user_accounts.id"), nullable=False, index=True)
+    analysis_id: Mapped[int] = mapped_column(ForeignKey("analysis_results.id"), nullable=False, index=True)
+    connection_id: Mapped[str] = mapped_column(ForeignKey("notification_connections.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, default="default_alert")
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class CustomAlertConditionRecord(Base):
