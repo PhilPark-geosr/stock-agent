@@ -7,6 +7,7 @@ from typing import Any, Protocol
 
 from app.domain.alert_conditions import CustomAlertCondition, RuleValidationResult
 from app.domain.models import (
+    AlertEvaluationRecord,
     AnalysisResult,
     CustomAlertConditionRecord,
     NotificationDeliveryRecord,
@@ -137,4 +138,34 @@ class NotificationDeliveryRepository(Protocol):
         *,
         reason: str,
     ) -> NotificationDeliveryRecord:
+        ...
+
+    def reserve_user_alert(
+        self,
+        *,
+        evaluation_id: int,
+        recipient_id: str,
+        analysis_id: int,
+        connection_id: str,
+        message: str,
+    ):
+        ...
+
+
+class AlertEvaluationRepository(Protocol):
+    def reserve(self, *, analysis_id: int, condition_id: int):
+        ...
+
+    def complete(
+        self,
+        evaluation_id: int,
+        *,
+        matched: bool,
+        reason: str,
+        notification_message: str | None,
+        evidence: list[str],
+    ) -> AlertEvaluationRecord:
+        ...
+
+    def mark_failed(self, evaluation_id: int, *, reason: str) -> AlertEvaluationRecord:
         ...

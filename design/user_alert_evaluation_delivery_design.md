@@ -1,6 +1,6 @@
 # 사용자별 알림 평가 및 전달 설계
 
-> 상태: OOAD 초안
+> 상태: 구현 완료 (`design/user-alert-evaluation-ooad`)
 >
 > 범위: 유스케이스, 시스템 시퀀스, 도메인 모델
 >
@@ -56,7 +56,10 @@ StockAnalysis 1 + UserAlertCondition 1 = AlertEvaluation 최대 1
 
 ### 3.4 증거 수집과 최종 판단을 구분한다
 
-- `CustomRuleAgent`는 사용자 조건을 해석하고 필요한 도구를 호출해 `CustomRuleContext`를 반환한다.
+- `UserAlertEvaluator`는 모든 사용자 알림 조건에 대해 항상 `CustomRuleAgent`를 먼저 호출한다.
+- `CustomRuleAgent`는 사용자 조건만 입력받아 해석하고, 외부 증거가 필요할 때만 허용된 도구를 호출해 `CustomRuleContext`를 반환한다.
+- `CustomRuleAgent`의 입력은 사용자 알림 조건 하나로 유지한다.
+- 공유 분석만으로 평가 가능한 조건이면 `CustomRuleAgent`는 도구를 호출하지 않고 빈 추가 증거를 반환할 수 있다.
 - `CustomRuleAgent`는 조건 충족 여부나 발송 여부를 결정하지 않는다.
 - `UserAlertEvaluator`는 공유 분석, 사용자 조건과 `CustomRuleContext`를 종합해 `AlertEvaluationDecision`을 반환한다.
 - 실제 발송 가능 여부는 에이전트가 아니라 애플리케이션 정책이 결정한다.
@@ -67,8 +70,9 @@ StockAnalysis 1 + UserAlertCondition 1 = AlertEvaluation 최대 1
 
 | 결과 | 의미 |
 | --- | --- |
-| 평가 완료, `matched=true` | 조건이 충족됨 |
-| 평가 완료, `matched=false` | 조건이 정상적으로 평가됐으나 충족되지 않음 |
+| 모델 결과 `matched` | 조건이 충족되어 평가를 `completed`, `matched=true`로 저장 |
+| 모델 결과 `not_matched` | 조건이 충족되지 않아 평가를 `completed`, `matched=false`로 저장 |
+| 모델 결과 `indeterminate` | 자료 부족 등으로 판단할 수 없어 평가를 `failed`로 저장 |
 | 평가 실패 | 증거 수집 또는 판단 결과를 신뢰할 수 없음 |
 | 전달 실패 | 조건은 충족됐지만 외부 채널 전송에 실패함 |
 
@@ -148,16 +152,17 @@ flowchart LR
 3. 시스템은 `(analysis_id, condition_id)`를 기준으로 알림 평가를 예약한다.
 4. 이미 같은 평가가 존재하면 해당 평가 대상을 중복 처리하지 않는다.
 5. `UserAlertEvaluator`는 공유 분석과 사용자 알림 조건을 입력받는다.
-6. 조건 평가에 추가 자료가 필요하면 `CustomRuleAgent`가 허용된 도구로 외부 증거를 수집한다.
-7. `UserAlertEvaluator`는 공유 분석, 조건과 수집된 증거를 바탕으로 조건 충족 여부, 판단 근거와 사용자용 메시지를 결정한다.
-8. 시스템은 평가 결정이 입력 조건에 대한 유효한 결과인지 검증한다.
-9. 시스템은 완료된 알림 평가를 저장한다.
-10. 조건이 충족되지 않았으면 해당 평가 대상의 처리를 종료한다.
-11. 조건이 충족됐으면 소유자의 활성 알림 연결을 조회한다.
-12. 활성 연결이 있으면 알림 평가를 원인으로 알림 전달을 예약한다.
-13. 시스템은 평가의 사용자용 메시지를 외부 알림 채널에 전달한다.
-14. 전달 성공 또는 실패를 알림 전달에 기록한다.
-15. 모든 평가 대상의 처리가 끝나면 평가와 전달 요약을 스케줄러에 반환한다.
+6. `UserAlertEvaluator`는 사용자 알림 조건을 `CustomRuleAgent`에 전달한다.
+7. `CustomRuleAgent`는 외부 증거가 필요하면 허용된 도구를 호출하고, 필요하지 않으면 도구 호출 없이 `CustomRuleContext`를 반환한다.
+8. `UserAlertEvaluator`는 공유 분석, 조건과 `CustomRuleContext`를 바탕으로 조건 충족 여부, 판단 근거와 사용자용 메시지를 결정한다.
+9. 시스템은 평가 결정이 입력 조건에 대한 유효한 결과인지 검증한다.
+10. 시스템은 `outcome`을 매핑해 완료되거나 실패한 알림 평가를 저장한다.
+11. 평가가 실패했거나 조건이 충족되지 않았으면 해당 평가 대상의 처리를 종료한다.
+12. 조건이 충족됐으면 소유자의 활성 알림 연결을 조회한다.
+13. 활성 연결이 있으면 알림 평가를 원인으로 알림 전달을 예약한다.
+14. 시스템은 평가의 사용자용 메시지를 외부 알림 채널에 전달한다.
+15. 전달 성공 또는 실패를 알림 전달에 기록한다.
+16. 모든 평가 대상의 처리가 끝나면 평가와 전달 요약을 스케줄러에 반환한다.
 
 #### 대안 흐름
 
@@ -171,7 +176,9 @@ flowchart LR
 
 **A3. 공유 분석만으로 평가 가능**
 
-- 추가 증거 수집을 생략하고 바로 조건을 평가한다.
+- `CustomRuleAgent`에는 정상적으로 진입한다.
+- `CustomRuleAgent`의 LLM이 도구를 요청하지 않으면 빈 추가 증거를 포함한 `CustomRuleContext`를 반환한다.
+- `UserAlertEvaluator`는 공유 분석과 조건을 주된 근거로 평가한다.
 
 **A4. 조건 미충족**
 
@@ -181,6 +188,7 @@ flowchart LR
 **A5. 증거 수집 또는 평가 실패**
 
 - 알림 평가를 `failed`로 기록한다.
+- 평가 모델이 자료 부족으로 `indeterminate`를 반환한 경우도 `failed`로 기록한다.
 - 조건 미충족으로 바꾸지 않으며 알림을 전달하지 않는다.
 - 다른 조건의 처리는 계속한다.
 
@@ -459,6 +467,7 @@ StockAnalysis + UserAlertCondition
 class UserAlertEvaluationTarget:
     owner_id: str
     subscription_id: int
+    condition_record_id: int
     condition: UserAlertCondition
 ```
 
@@ -468,6 +477,7 @@ class UserAlertEvaluationTarget:
 | --- | --- | --- |
 | `owner_id` | `UserAlertDispatcher` | 알림 연결과 수신자 확인 |
 | `subscription_id` | `UserAlertDispatcher` | 전달 직전 구독 활성 상태 재확인 |
+| `condition_record_id` | `UserAlertDispatcher` | 평가 유일성 예약과 조건 활성 상태 재확인 |
 | `condition` | `UserAlertEvaluator` | 공유 분석에 대한 조건 충족 여부 평가 |
 
 evaluator에는 target 전체를 넘기지 않는다. 사용자 소유권과 알림 연결은 평가 판단에 필요하지 않으므로 공유 분석과 조건만 전달한다.
@@ -588,7 +598,7 @@ flowchart TD
 
 평가 예약은 evaluator 호출보다 먼저 수행한다. 그래야 스케줄러가 동일 공유 분석을 동시에 처리해도 비싼 LLM과 도구 호출을 중복 실행하지 않는다.
 
-`AlertEvaluationDecision`은 발송 명령이 아니다. dispatcher는 결정을 평가로 저장한 뒤 `matched`, 현재 활성 상태, 알림 연결과 전달 중복을 차례로 확인해야 한다.
+`AlertEvaluationDecision`은 발송 명령이 아니다. dispatcher는 결정의 `outcome`을 평가 상태로 매핑한 뒤, 완료되고 충족된 평가에 대해서만 현재 활성 상태, 알림 연결과 전달 중복을 차례로 확인해야 한다.
 
 ## 10. 도메인 모델에서 도출되는 평가 인터페이스
 
@@ -605,40 +615,257 @@ class UserAlertEvaluator(Protocol):
         ...
 ```
 
-`AlertEvaluationDecision`은 영속 엔티티가 아니라 평가 모듈이 반환하는 값이다. 조건 식별자는 호출자가 이미 알고 있으므로 에이전트 출력에 다시 요구하지 않는다.
+`AlertEvaluationDecision`은 영속 엔티티가 아니라 평가 모듈이 반환하는 값이다. 조건 식별자는 호출자가 이미 알고 있으므로 LLM 출력에 다시 요구하지 않는다.
 
 ```python
 class AlertEvaluationDecision(BaseModel):
-    matched: bool
+    outcome: Literal[
+        "matched",
+        "not_matched",
+        "indeterminate",
+    ]
     reason: str
     notification_message: str | None = None
     evidence: list[str] = Field(default_factory=list)
 ```
 
-`UserAlertEvaluator`의 LangGraph 구현은 내부에서 `CustomRuleAgent`를 중첩 그래프로 호출할 수 있다.
+`matched: bool`만 사용하면 자료 부족으로 판단하지 못한 경우와 근거를 바탕으로 조건이 충족되지 않았다고 판단한 경우를 구분할 수 없다. `indeterminate`는 정상적인 미충족이 아니라 평가 실패로 취급한다.
+
+| `outcome` | `AlertEvaluation.status` | `AlertEvaluation.matched` | 전달 가능 |
+| --- | --- | --- | --- |
+| `matched` | `completed` | `true` | 가능 |
+| `not_matched` | `completed` | `false` | 불가능 |
+| `indeterminate` | `failed` | `null` | 불가능 |
+
+dispatcher는 검증된 결정을 다음과 같이 영속 상태로 매핑한다.
+
+```python
+if decision.outcome == "indeterminate":
+    evaluations.mark_failed(
+        evaluation_id,
+        reason=decision.reason,
+    )
+    return
+
+evaluation = evaluations.complete(
+    evaluation_id,
+    matched=decision.outcome == "matched",
+    reason=decision.reason,
+    notification_message=decision.notification_message,
+    evidence=decision.evidence,
+)
+```
+
+### 10.1 최종 판단을 수행하는 LLM seam
+
+`evaluate_condition` 노드는 자연어 조건의 최종 의미 판단을 직접 구현하지 않고 전용 `AlertEvaluationModel` interface를 호출한다.
+
+```python
+class AlertEvaluationModel(Protocol):
+    def evaluate(
+        self,
+        *,
+        analysis: StockAnalysis,
+        condition: UserAlertCondition,
+        custom_context: CustomRuleContext,
+        validation_errors: list[str] | None = None,
+    ) -> AlertEvaluationDecision:
+        ...
+```
+
+운영 환경의 `GeminiAlertEvaluationModel`과 테스트 환경의 fake adapter가 같은 interface를 만족한다. 공유 종목 분석을 생성하는 기존 `GeminiAnalysisAgent`는 재사용하지 않는다.
+
+| 모듈 | 책임 |
+| --- | --- |
+| `GeminiAnalysisAgent` | 시장 데이터를 분석해 사용자 독립적인 공유 종목 분석 생성 |
+| `GeminiAlertEvaluationModel` | 공유 분석을 근거로 사용자 알림 조건 한 건 평가 |
+
+LLM에는 조건 판단에 필요한 사용자 독립 분석과 조건, 추가 증거만 전달한다. 사용자 계정 ID, 구독 ID와 알림 연결은 입력에 포함하지 않는다.
+
+```python
+payload = {
+    "stock_analysis": {
+        "symbol": analysis.symbol,
+        "analyzed_at": analysis.analyzed_at,
+        "data_timestamp": analysis.data_timestamp,
+        "summary": analysis.summary,
+        "key_reasons": analysis.key_reasons,
+        "risk_factors": analysis.risk_factors,
+        "indicators": analysis.support_levels,
+    },
+    "user_alert_condition": {
+        "user_rule": condition.user_rule,
+        "normalized_rule": condition.normalized_rule,
+    },
+    "custom_rule_context": {
+        "gathered_facts": custom_context.gathered_facts,
+        "evidence": custom_context.evidence,
+        "summary": custom_context.summary,
+    },
+}
+```
+
+평가 모델의 시스템 프롬프트는 최소한 다음 규칙을 포함한다.
+
+```text
+너는 사용자 주식 알림 조건 평가 모델이다.
+
+- 하나의 공유 종목 분석과 하나의 사용자 알림 조건만 평가한다.
+- 제공된 stock_analysis와 custom_rule_context만 근거로 사용한다.
+- 새로운 사실을 추측하거나 만들지 않는다.
+- 외부 도구를 호출하지 않는다.
+- 조건이 명확히 충족되면 matched를 반환한다.
+- 조건이 명확히 충족되지 않으면 not_matched를 반환한다.
+- 자료가 부족해 판단할 수 없으면 indeterminate를 반환한다.
+- 알림을 직접 발송하지 않는다.
+- 반드시 AlertEvaluationDecision JSON 구조로 응답한다.
+```
+
+예상 출력은 다음과 같다.
+
+```json
+{
+  "outcome": "matched",
+  "reason": "삼성전자의 등락률이 6.2%로 사용자 기준인 5%를 초과했습니다.",
+  "notification_message": "삼성전자가 6.2% 상승해 설정하신 5% 상승 조건을 충족했습니다.",
+  "evidence": [
+    "stock_analysis.indicators.change_percent=6.2"
+  ]
+}
+```
+
+### 10.2 `UserAlertEvaluator` LangGraph
+
+`UserAlertEvaluator`의 LangGraph 구현은 모든 사용자 조건에 대해 항상 `CustomRuleAgent`를 중첩 그래프로 호출한다. 바깥 그래프는 추가 증거 필요 여부를 미리 판단하지 않는다.
 
 ```mermaid
 flowchart TD
     Start((START))
-    Prepare[prepare_evaluation]
-    NeedContext{추가 증거가 필요한가?}
     CustomRule[custom_rule_agent 서브그래프]
     Evaluate[evaluate_condition]
     Validate[validate_decision]
     Valid{유효한 결정인가?}
+    Retry{평가 시도가 1회인가?}
     Failed[evaluation_failed]
     End((END))
 
-    Start --> Prepare
-    Prepare --> NeedContext
-    NeedContext -->|필요함| CustomRule
-    NeedContext -->|불필요| Evaluate
+    Start --> CustomRule
     CustomRule --> Evaluate
     Evaluate --> Validate
     Validate --> Valid
     Valid -->|유효함| End
-    Valid -->|유효하지 않음| Failed
+    Valid -->|유효하지 않음| Retry
+    Retry -->|예: 검증 피드백 포함| Evaluate
+    Retry -->|아니오| Failed
     Failed --> End
+```
+
+그래프 상태와 `custom_rule_agent` 노드는 다음 형태다.
+
+```python
+class UserAlertEvaluationState(TypedDict, total=False):
+    analysis: StockAnalysis
+    condition: UserAlertCondition
+    custom_context: CustomRuleContext
+    decision: AlertEvaluationDecision
+    validation_errors: list[str]
+    attempts: int
+    failure_reason: str
+
+
+def _run_custom_rule_agent(
+    self,
+    state: UserAlertEvaluationState,
+) -> dict:
+    context = self.custom_rule_agent.build_context(
+        state["condition"],
+    )
+    return {"custom_context": context}
+```
+
+`CustomRuleAgent`에는 공유 분석을 넘기지 않는다. 공유 분석은 `evaluate_condition` 노드가 사용자 조건과 추가 증거를 종합할 때 사용한다.
+
+```python
+def _evaluate_condition(
+    self,
+    state: UserAlertEvaluationState,
+) -> dict:
+    decision = self.evaluation_model.evaluate(
+        analysis=state["analysis"],
+        condition=state["condition"],
+        custom_context=state["custom_context"],
+        validation_errors=state.get("validation_errors") or None,
+    )
+    return {"decision": decision}
+```
+
+`validate_decision`은 LLM이 아니라 일반 Python 코드로 결과의 의미 불변식을 검증한다.
+
+```python
+def _validate_decision(
+    self,
+    state: UserAlertEvaluationState,
+) -> dict:
+    decision = state["decision"]
+    errors: list[str] = []
+
+    if not decision.reason.strip():
+        errors.append("evaluation requires a reason")
+
+    if decision.outcome == "matched":
+        if not (decision.notification_message or "").strip():
+            errors.append(
+                "matched evaluation requires a notification message"
+            )
+    elif decision.notification_message:
+        errors.append(
+            "only matched evaluation can have a notification message"
+        )
+
+    return {"validation_errors": errors}
+```
+
+Pydantic은 JSON 구조와 타입을 검증하고, `validate_decision`은 `outcome`, 판단 근거와 메시지 사이의 의미 규칙을 검증한다. 출력 구조 또는 의미 검증에 실패하면 검증 피드백을 포함해 정확히 한 번 다시 평가하고, 두 번째 결과도 유효하지 않으면 평가 실패로 처리한다. 유효한 `indeterminate`는 형식 오류가 아니므로 재시도하지 않으며 dispatcher가 실패한 알림 평가로 저장한다. 도구 호출과 HTTP transport 오류는 초기 범위에서 자동 재시도하지 않는다.
+
+### 10.3 `CustomRuleAgent` 내부 도구 분기
+
+외부 도구 호출 여부는 바깥 evaluator 그래프가 아니라 `CustomRuleAgent` 내부 conditional edge가 결정한다.
+
+```mermaid
+flowchart TD
+    LLM[custom_rule_llm]
+    HasToolCalls{마지막 LLM 응답에 tool_calls가 있는가?}
+    Tools[tools]
+    Finalize[finalize_context]
+    End((END))
+
+    LLM --> HasToolCalls
+    HasToolCalls -->|예| Tools
+    Tools --> LLM
+    HasToolCalls -->|아니오| Finalize
+    Finalize --> End
+```
+
+```python
+def _route_after_llm(
+    state: CustomRuleAgentState,
+) -> str:
+    last_message = state["messages"][-1]
+
+    if getattr(last_message, "tool_calls", None):
+        return "tools"
+
+    return "finalize"
+```
+
+따라서 조건 진입 규칙은 다음과 같다.
+
+```text
+활성 사용자 알림 조건
+→ 항상 CustomRuleAgent 진입
+→ tool_calls가 있으면 도구 실행
+→ tool_calls가 없으면 추가 도구 없이 CustomRuleContext 확정
+→ 공유 분석 + 조건 + CustomRuleContext로 최종 평가
 ```
 
 평가 그래프는 결정을 반환하고 영속화나 외부 알림 전송을 직접 수행하지 않는다. 평가 예약과 저장, 활성 연결 확인과 전달은 사용자별 알림 유스케이스가 조율한다.

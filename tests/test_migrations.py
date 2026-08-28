@@ -16,7 +16,11 @@ def test_empty_database_is_upgraded_to_baseline(tmp_path: Path) -> None:
     migrate_database(url)
 
     tables = set(inspect(create_engine(url)).get_table_names())
-    assert {"alembic_version", "watchlist_items", "analysis_results", "custom_alert_conditions", "notification_connections", "notification_deliveries"} <= tables
+    assert {"alembic_version", "watchlist_items", "analysis_results", "custom_alert_conditions", "notification_connections", "notification_deliveries", "alert_evaluations"} <= tables
+    delivery_columns = {
+        column["name"] for column in inspect(create_engine(url)).get_columns("notification_deliveries")
+    }
+    assert "evaluation_id" in delivery_columns
 
 
 def test_known_legacy_database_is_stamped_without_losing_rows(tmp_path: Path) -> None:
@@ -33,7 +37,7 @@ def test_known_legacy_database_is_stamped_without_losing_rows(tmp_path: Path) ->
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT symbol FROM watchlist_items WHERE id=1")) == "AAPL"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0007_notification_delivery"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0008_user_alert_evaluation"
         columns = {column["name"] for column in inspect(engine).get_columns("watchlist_items")}
         assert {"user_account_id", "ended_at"} <= columns
         condition_columns = {
