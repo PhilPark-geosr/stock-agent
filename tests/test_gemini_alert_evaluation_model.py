@@ -80,6 +80,19 @@ def test_gemini_evaluation_model_parses_decision_without_user_delivery_data(monk
     assert "owner_id" not in request_text
     assert "connection_id" not in request_text
     assert "access_token" not in request_text
+    generation_config = client.requests[0][1]["json"]["generationConfig"]
+    assert generation_config["responseMimeType"] == "application/json"
+    assert generation_config["responseSchema"]["properties"]["outcome"]["enum"] == [
+        "matched",
+        "not_matched",
+        "indeterminate",
+    ]
+    assert generation_config["responseSchema"]["properties"]["notification_message"] == {
+        "type": "string",
+        "nullable": True,
+        "description": "A concise Korean message for matched; null otherwise.",
+    }
+    assert "additionalProperties" not in generation_config["responseSchema"]
 
 
 def test_gemini_evaluation_model_rejects_malformed_output(monkeypatch):

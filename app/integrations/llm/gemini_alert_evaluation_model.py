@@ -69,7 +69,10 @@ class GeminiAlertEvaluationModel:
                 headers={"Content-Type": "application/json", "x-goog-api-key": self._require_api_key()},
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"responseMimeType": "application/json"},
+                    "generationConfig": {
+                        "responseMimeType": "application/json",
+                        "responseSchema": DECISION_SCHEMA,
+                    },
                 },
             )
             response.raise_for_status()
@@ -109,6 +112,33 @@ SYSTEM_PROMPT = """
 - 알림을 직접 발송하지 않는다.
 - 반드시 AlertEvaluationDecision JSON object만 응답한다.
 """.strip()
+
+
+DECISION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "outcome": {
+            "type": "string",
+            "enum": ["matched", "not_matched", "indeterminate"],
+            "description": "The evaluation outcome; use exactly one enum value.",
+        },
+        "reason": {
+            "type": "string",
+            "description": "A concise Korean explanation grounded in the supplied evidence.",
+        },
+        "notification_message": {
+            "type": "string",
+            "nullable": True,
+            "description": "A concise Korean message for matched; null otherwise.",
+        },
+        "evidence": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Specific supplied facts supporting the outcome.",
+        },
+    },
+    "required": ["outcome", "reason", "notification_message", "evidence"],
+}
 
 
 def _extract_text(payload: dict[str, Any]) -> str | None:
