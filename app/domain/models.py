@@ -111,10 +111,28 @@ class NotificationConnectionRecord(Base):
 
 class NotificationDeliveryRecord(Base):
     __tablename__ = "notification_deliveries"
-    __table_args__ = (UniqueConstraint("recipient_id", "analysis_id", "kind", name="uq_notification_delivery_recipient_analysis_kind"),)
+    __table_args__ = (
+        Index(
+            "uq_notification_delivery_default_alert",
+            "recipient_id",
+            "analysis_id",
+            unique=True,
+            sqlite_where=text("kind = 'default_alert'"),
+            postgresql_where=text("kind = 'default_alert'"),
+        ),
+        Index(
+            "uq_notification_delivery_user_alert",
+            "evaluation_id",
+            "connection_id",
+            unique=True,
+            sqlite_where=text("kind = 'user_alert'"),
+            postgresql_where=text("kind = 'user_alert'"),
+        ),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     recipient_id: Mapped[str] = mapped_column(ForeignKey("user_accounts.id"), nullable=False, index=True)
     analysis_id: Mapped[int] = mapped_column(ForeignKey("analysis_results.id"), nullable=False, index=True)
+    evaluation_id: Mapped[int | None] = mapped_column(ForeignKey("alert_evaluations.id"), nullable=True, index=True)
     connection_id: Mapped[str] = mapped_column(ForeignKey("notification_connections.id"), nullable=False)
     kind: Mapped[str] = mapped_column(String(32), nullable=False, default="default_alert")
     message: Mapped[str] = mapped_column(Text, nullable=False)
@@ -122,6 +140,25 @@ class NotificationDeliveryRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class AlertEvaluationRecord(Base):
+    __tablename__ = "alert_evaluations"
+    __table_args__ = (
+        UniqueConstraint("analysis_id", "condition_id", name="uq_alert_evaluation_analysis_condition"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    analysis_id: Mapped[int] = mapped_column(ForeignKey("analysis_results.id"), nullable=False, index=True)
+    condition_id: Mapped[int] = mapped_column(ForeignKey("custom_alert_conditions.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    matched: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notification_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class CustomAlertConditionRecord(Base):

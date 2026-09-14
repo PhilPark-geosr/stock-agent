@@ -164,3 +164,33 @@ def test_scheduler_run_endpoint(client, db_session, market_data, agent, alert_no
     assert body["ran"] is True
     assert body["symbols_analyzed"] == ["005930.KS"]
     assert AnalysisRepository(db_session).count_by_symbol("005930.KS") == 1
+
+
+def test_scheduled_analysis_dispatches_user_alerts_independently_of_system_alerts(
+    db_session, market_data, agent, current_account
+):
+    class FailingSystemDispatcher:
+        def dispatch(self, analysis):
+            raise RuntimeError("system delivery unavailable")
+
+    class RecordingUserDispatcher:
+        def __init__(self):
+            self.analysis_ids = []
+
+        def dispatch(self, analysis):
+            self.analysis_ids.append(analysis.id)
+
+    user_dispatcher = RecordingUserDispatcher()
+    service = build_analysis_service(
+        db_session,
+        market_data_provider=market_data,
+        agent=agent,
+        system_alert_dispatcher=FailingSystemDispatcher(),
+        user_alert_dispatcher=user_dispatcher,
+    )
+
+    service.run_manual_analysis("005930.KS")
+    result = service.run_scheduled_batch()
+
+    assert result.symbols_analyzed == ["005930.KS"]
+    assert len(user_dispatcher.analysis_ids) == 1

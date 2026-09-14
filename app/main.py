@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_db()
-    logger.info("Runtime user alert delivery disabled for the initial multi-user release")
+    logger.info("Runtime user alert evaluation and delivery initialized")
 
     scheduler_task: asyncio.Task[None] | None = None
     stop_event: asyncio.Event | None = None
