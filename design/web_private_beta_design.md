@@ -69,11 +69,11 @@
 
 ```mermaid
 classDiagram
-    class UserAccount[사용자 계정]
-    class Invitation[초대 코드] {
+    class UserAccount["사용자 계정"]
+    class Invitation["초대 코드"] {
         사용가능여부판단(현재시각)
     }
-    class BetaAccess[베타 이용 권한]
+    class BetaAccess["베타 이용 권한"]
     UserAccount "1" -- "0..1" BetaAccess : 보유
     Invitation "1" -- "0..1" BetaAccess : 등록으로 부여
 ```
