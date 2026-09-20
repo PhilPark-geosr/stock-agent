@@ -244,7 +244,7 @@ def kakao_callback(
         "kakao_callback.html",
         {
             "success": True,
-            "message": "로그인이 완료되었습니다. 앱으로 돌아가세요.",
+            "message": "로그인이 완료되었습니다. 로그인을 시작한 창으로 돌아가세요.",
             "access_token": None,
             "refresh_token": None,
         },
