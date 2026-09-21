@@ -7,6 +7,7 @@ function showView(viewId) {
     button.classList.toggle("active", button.dataset.view === viewId);
   });
   window.scrollTo({ top: 0, behavior: "smooth" });
+  document.dispatchEvent(new CustomEvent("stock-agent:view", { detail: viewId }));
 }
 
 function bindNavigationEvents() {
