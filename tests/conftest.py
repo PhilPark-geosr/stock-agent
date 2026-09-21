@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timezone
 
 os.environ.setdefault("SCHEDULER_ENABLED", "false")
+os.environ.setdefault("BRIEFING_SCHEDULER_ENABLED", "false")
 
 import pytest
 from fastapi.testclient import TestClient
