@@ -71,6 +71,17 @@ def test_previous_head_preserves_all_existing_rows(tmp_path: Path) -> None:
     engine = create_engine(url)
     with engine.begin() as connection:
         connection.execute(text("INSERT INTO user_accounts (id, login_provider, provider_subject_id, created_at) VALUES ('account', 'kakao', 'subject', '2026-09-21')"))
+    from sqlalchemy.orm import Session
+    from app.domain.models import AnalysisResult, NotificationConnectionRecord, NotificationDeliveryRecord
+
+    with Session(engine) as db:
+        db.add(AnalysisResult(id=1, symbol='AAPL', overall_judgment='neutral', summary='Preserve this analysis'))
+        db.add(NotificationConnectionRecord(id='connection', owner_id='account', channel='kakao'))
+        db.flush()
+        db.add(NotificationDeliveryRecord(recipient_id='account', analysis_id=1,
+                                         connection_id='connection', kind='default_alert',
+                                         message='Preserve this notification', status='sent'))
+        db.commit()
     with engine.connect() as connection:
         before = {name: connection.execute(text(f'SELECT * FROM {name}')).all() for name in inspect(engine).get_table_names() if name != 'alembic_version'}
     migrate_database(url)
