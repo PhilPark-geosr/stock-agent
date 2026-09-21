@@ -58,5 +58,6 @@ def test_kakao_callback_completes_attempt_without_exposing_tokens(client) -> Non
     assert response.status_code == 200
     assert "로그인" in response.text
     assert "로그인을 시작한 창으로 돌아가세요" in response.text
+    assert "앱으로 돌아" not in response.text
     assert "access_token" not in response.text
     assert "refresh_token" not in response.text

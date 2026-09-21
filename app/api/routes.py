@@ -92,7 +92,11 @@ def start_login_attempt(payload: LoginAttemptCreate, attempts: LoginAttemptServi
 
 
 @router.post("/auth/login-attempts/{attempt_id}/exchange")
-def exchange_login_attempt(attempt_id: str, payload: LoginAttemptExchange, attempts: LoginAttemptService = Depends(get_login_attempt_service)):
+def exchange_login_attempt(attempt_id: str, payload: LoginAttemptExchange, request: Request, attempts: LoginAttemptService = Depends(get_login_attempt_service)):
+    # Browser POSTs must use the HttpOnly-cookie exchange, never token JSON.
+    # Electron's main-process HTTP client does not send an Origin header.
+    if request.headers.get("origin") is not None:
+        raise HTTPException(status_code=403, detail="Use the web session exchange")
     try:
         result = attempts.exchange(attempt_id, payload.verifier)
     except AttemptPending:
