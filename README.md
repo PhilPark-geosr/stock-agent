@@ -1,5 +1,64 @@
 # Stock Agent
 
+## React 웹: 로그인과 운영자 초대 발급
+
+새 웹 화면은 **React·TypeScript·Vite**로 구성됩니다. 현재 웹 범위는 카카오 로그인, 계정 ID 확인, 운영자 초대 발급입니다. 기존 Electron은 유지되며, 일반 화면의 웹 이전과 Capacitor Android 패키징은 후속 작업입니다. 초대 등록·베타 이용 권한 부여·일반 API의 베타 권한 검사는 아직 구현하지 않았습니다.
+
+### 로컬에서 빌드된 웹 실행
+
+기존 Python 설치와 카카오 설정을 마친 뒤, `.env`에 다음 값을 설정합니다. 기존 로더는 프로세스 환경보다 프로젝트 `.env`를 우선하므로 설정을 바꿀 때 이 파일을 수정하고 서버를 재시작하세요.
+
+```env
+ADMIN_ACCOUNT_ID=
+WEB_ORIGIN=http://127.0.0.1:8000
+WEB_COOKIE_SECURE=false
+SCHEDULER_ENABLED=false
+KAKAO_REDIRECT_URI=http://127.0.0.1:8000/auth/kakao/callback
+```
+
+`WEB_COOKIE_SECURE=false`는 로컬 HTTP 전용입니다. HTTPS 운영 환경에서는 `true`를 사용하고 `WEB_ORIGIN`과 카카오 Redirect URI를 실제 주소에 맞춰 설정합니다. 초대·로그인 확인만 할 때는 스케줄러를 끄면 정기 AI 호출이 실행되지 않습니다.
+
+프로젝트 루트에서 실행합니다.
+
+```powershell
+npm --prefix web ci
+npm --prefix web run build
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+브라우저에서 `http://127.0.0.1:8000/login`에 접속합니다. 카카오 콘솔에도 위 콜백 주소를 등록해야 합니다. 기존 `/` 화면과 API는 그대로 유지합니다. 웹을 빌드하지 않았다면 `/login`은 503을 반환합니다.
+
+### 첫 운영자 지정과 발급
+
+1. `/login`에서 카카오 로그인합니다. 팝업이 차단되면 허용한 뒤 다시 시도합니다.
+2. 표시된 **내 서비스 계정 ID**를 확인합니다.
+3. `.env`의 `ADMIN_ACCOUNT_ID`에 그 ID 하나를 설정하고 서버를 재시작합니다.
+4. `/admin`에 접속해 초대 코드를 발급하고 복사합니다. 기존 유효 세션을 그대로 사용할 수 있습니다.
+5. 코드를 전달할 사용자에게 웹 주소와 함께 직접 보냅니다. 단, 현재는 등록 기능이 후속 작업이므로 발급만 가능하고 사용자가 이 코드로 서비스 권한을 얻을 수는 없습니다.
+
+첫 로그인 계정을 자동으로 운영자로 지정하지 않습니다. 운영자 설정이 비어 있으면 아무도 발급할 수 없습니다. 운영자는 베타 권한 없이 발급 가능하며, 발급으로 베타 권한을 얻지는 않습니다.
+
+한 요청에 코드 하나를 발급합니다. 정확히 발급 후 7일이 되는 시점부터 만료되며 화면은 한국 시간으로 기한을 표시합니다. 원문은 발급 응답에서만 제공하고 DB에는 해시만 저장하므로 새로고침 후 다시 조회할 수 없습니다. 요청 중 중복 클릭과 자동 재시도는 하지 않습니다. 응답을 받지 못한 경우 서버에는 발급 기록이 남아 있을 수 있습니다.
+
+### 웹 개발과 검증
+
+Vite 개발 시에는 `.env`의 `WEB_ORIGIN=http://127.0.0.1:5173`으로 바꾸고 FastAPI를 재시작합니다. 카카오 콜백은 계속 8000번 서버를 사용합니다. 별도 터미널에서 `npm --prefix web run dev` 실행 후 `http://127.0.0.1:5173/login`을 엽니다. 개발 서버의 화면 접근과 무관하게 실제 발급 API는 FastAPI에서 권한을 검사합니다.
+
+```powershell
+uv run pytest
+npm --prefix desktop-demo test
+npm --prefix desktop-demo run check
+npm --prefix web test
+npm --prefix web run typecheck
+npm --prefix web run build
+# 최초 한 번 web 폴더에서: npx playwright install chromium
+npm --prefix web run test:e2e
+```
+
+브라우저 테스트는 임시 DB와 테스트 전용 카카오 대역을 사용합니다. 실제 DB, 사용자 키, 외부 AI 호출을 사용하지 않으며 제품에 로그인 우회 경로를 추가하지 않습니다. 로그인 토큰은 HttpOnly 쿠키에만 전달하고 변경 요청의 Origin을 검사합니다. 실제 카카오 서비스 연결은 본인의 앱 설정으로 별도 확인해야 합니다.
+
+## 기존 Electron 서비스
+
 카카오 서비스 로그인과 사용자별 관심 종목 구독을 제공하는 Electron 기반 주식 분석 앱입니다. FastAPI 백엔드는 `yfinance` 시장 데이터와 Gemini를 이용해 종목별 공유 분석을 생성하고 SQLite에 보관합니다.
 
 ## 요구사항
