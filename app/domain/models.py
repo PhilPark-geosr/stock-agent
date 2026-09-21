@@ -6,6 +6,7 @@ from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.domain import briefing_records  # noqa: F401 — register briefing metadata
 
 
 def utc_now() -> datetime:

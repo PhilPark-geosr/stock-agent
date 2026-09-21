@@ -13,6 +13,13 @@ contextBridge.exposeInMainWorld("desktop", {
     chrome: process.versions.chrome
   },
   backend: {
+    briefingSettings: (market) => request("GET", `/briefings/settings/${encodeURIComponent(market)}`),
+    briefingOptions: (market) => request("GET", `/briefings/options/${encodeURIComponent(market)}`),
+    saveBriefingSettings: (market, body) => request("PUT", `/briefings/settings/${encodeURIComponent(market)}`, body),
+    generateBriefing: (body) => request("POST", "/briefings", body),
+    listBriefings: (offset = 0) => request("GET", `/briefings?offset=${Number(offset) || 0}&limit=30`),
+    briefingById: (id) => request("GET", `/briefings/${encodeURIComponent(id)}`),
+    redeliverBriefing: (id, body) => request("POST", `/briefings/${encodeURIComponent(id)}/delivery`, body),
     status: () => ipcRenderer.invoke("backend:status"),
     listWatchlist: () => request("GET", "/watchlist"),
     addWatchlist: (symbol) => request("POST", "/watchlist", { symbol }),
