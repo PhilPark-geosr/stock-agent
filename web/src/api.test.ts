@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ApiError, createApi } from './api';
 
-const session = { id: 'operator', login_provider: 'kakao', is_operator: true };
+const session = { id: 'operator', login_provider: 'kakao', is_operator: true, has_beta_access: false };
 const response = (status: number, body?: unknown) => new Response(body === undefined ? null : JSON.stringify(body), { status });
 
 describe('HTTP boundary', () => {
@@ -19,6 +19,19 @@ describe('HTTP boundary', () => {
     const api = createApi({ request });
     expect(await api.session()).toEqual(session);
     await expect(api.logout()).resolves.toBeUndefined();
+  });
+
+  it('uses cookie credentials for invitation redemption and stored analysis reads', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(response(200, { ...session, has_beta_access: true }))
+      .mockResolvedValueOnce(response(200, []));
+    const api = createApi({ request });
+    await expect(api.redeem('invite-code')).resolves.toMatchObject({ has_beta_access: true });
+    await expect(api.analysisHistory('MSFT', 20)).resolves.toEqual([]);
+    expect(request.mock.calls[0][0]).toBe('/auth/web/invitations/redeem');
+    expect(JSON.parse(request.mock.calls[0][1].body)).toEqual({ code: 'invite-code' });
+    expect(request.mock.calls[1][0]).toBe('/stocks/MSFT/analysis?limit=20&offset=20');
+    expect(request.mock.calls[1][1]).toEqual({ credentials: 'same-origin' });
   });
 });
 

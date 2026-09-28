@@ -9,6 +9,8 @@ export default defineConfig({
     proxy: {
       '/auth': 'http://127.0.0.1:8000',
       '/admin/invitations': 'http://127.0.0.1:8000',
+      '/watchlist': 'http://127.0.0.1:8000',
+      '/stocks': 'http://127.0.0.1:8000',
     },
   },
   test: {

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AdminPage } from './AdminPage';
 import { ApiError, type WebApi } from './api';
 
-const operator = { id: 'operator-account', login_provider: 'kakao', is_operator: true };
+const operator = { id: 'operator-account', login_provider: 'kakao', is_operator: true, has_beta_access: false };
 
 function apiWith(issue: WebApi['issue']): WebApi {
   return {
@@ -11,6 +11,12 @@ function apiWith(issue: WebApi['issue']): WebApi {
     login: vi.fn(),
     logout: vi.fn().mockResolvedValue(undefined),
     issue,
+    redeem: vi.fn(),
+    watchlist: vi.fn(),
+    addWatchlist: vi.fn(),
+    removeWatchlist: vi.fn(),
+    analysisHistory: vi.fn(),
+    analysisDetail: vi.fn(),
   };
 }
 

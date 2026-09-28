@@ -2,6 +2,7 @@ export interface Session {
   id: string;
   login_provider: string;
   is_operator: boolean;
+  has_beta_access: boolean;
 }
 
 export interface Invitation {
@@ -9,11 +10,43 @@ export interface Invitation {
   expires_at: string;
 }
 
+export interface WatchlistItem {
+  id: number;
+  symbol: string;
+  created_at: string;
+}
+
+export interface AnalysisHistoryItem {
+  id: number;
+  symbol: string;
+  analyzed_at: string;
+  data_timestamp: string | null;
+  overall_judgment: string;
+  summary: string;
+  should_alert: boolean;
+  triggered_alerts: string[];
+  shared_safe: boolean;
+}
+
+export interface AnalysisResult extends AnalysisHistoryItem {
+  key_reasons: string[];
+  risk_factors: string[];
+  support_levels: Record<string, unknown>;
+  alert_reason: string | null;
+  raw_result: Record<string, unknown> | null;
+}
+
 export interface WebApi {
   session(): Promise<Session>;
   login(signal?: AbortSignal): Promise<Session>;
   logout(): Promise<void>;
   issue(): Promise<Invitation>;
+  redeem(code: string): Promise<Session>;
+  watchlist(): Promise<WatchlistItem[]>;
+  addWatchlist(symbol: string): Promise<WatchlistItem>;
+  removeWatchlist(symbol: string): Promise<void>;
+  analysisHistory(symbol: string, offset?: number): Promise<AnalysisHistoryItem[]>;
+  analysisDetail(symbol: string, id: number): Promise<AnalysisResult>;
 }
 
 export class ApiError extends Error {
@@ -159,6 +192,49 @@ export function createApi(options: ApiOptions = {}): WebApi {
         credentials: 'same-origin',
       });
       return expectJson<Invitation>(response);
+    },
+
+    async redeem(code) {
+      const response = await request('/auth/web/invitations/redeem', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: jsonHeaders,
+        body: JSON.stringify({ code }),
+      });
+      return expectJson<Session>(response);
+    },
+
+    async watchlist() {
+      return expectJson<WatchlistItem[]>(await request('/watchlist', { credentials: 'same-origin' }));
+    },
+
+    async addWatchlist(symbol) {
+      const response = await request('/watchlist', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: jsonHeaders,
+        body: JSON.stringify({ symbol }),
+      });
+      return expectJson<WatchlistItem>(response);
+    },
+
+    async removeWatchlist(symbol) {
+      const response = await request(`/watchlist/${encodeURIComponent(symbol)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      if (!response.ok) throw new ApiError(response.status);
+    },
+
+    async analysisHistory(symbol, offset = 0) {
+      const query = new URLSearchParams({ limit: '20', offset: String(offset) });
+      const response = await request(`/stocks/${encodeURIComponent(symbol)}/analysis?${query}`, { credentials: 'same-origin' });
+      return expectJson<AnalysisHistoryItem[]>(response);
+    },
+
+    async analysisDetail(symbol, id) {
+      const response = await request(`/stocks/${encodeURIComponent(symbol)}/analysis/${id}`, { credentials: 'same-origin' });
+      return expectJson<AnalysisResult>(response);
     },
   };
 }
