@@ -11,6 +11,8 @@ export default defineConfig({
       '/admin/invitations': 'http://127.0.0.1:8000',
       '/watchlist': 'http://127.0.0.1:8000',
       '/stocks': 'http://127.0.0.1:8000',
+      '/alert-conditions': 'http://127.0.0.1:8000',
+      '/notification-connections': 'http://127.0.0.1:8000',
     },
   },
   test: {

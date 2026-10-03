@@ -36,6 +36,20 @@ export interface AnalysisResult extends AnalysisHistoryItem {
   raw_result: Record<string, unknown> | null;
 }
 
+export interface AlertCondition {
+  id: number;
+  symbol: string;
+  name: string;
+  user_rule: string;
+  validation_summary: string;
+  enabled: boolean;
+}
+
+export interface NotificationConnection {
+  connected: boolean;
+  connection_id: number | null;
+}
+
 export interface WebApi {
   session(): Promise<Session>;
   login(signal?: AbortSignal): Promise<Session>;
@@ -47,15 +61,26 @@ export interface WebApi {
   removeWatchlist(symbol: string): Promise<void>;
   analysisHistory(symbol: string, offset?: number): Promise<AnalysisHistoryItem[]>;
   analysisDetail(symbol: string, id: number): Promise<AnalysisResult>;
+  runAnalysis(symbol: string): Promise<AnalysisResult>;
+  alertConditions(): Promise<AlertCondition[]>;
+  addAlertCondition(symbol: string, userRule: string): Promise<AlertCondition>;
+  removeAlertCondition(id: number): Promise<void>;
+  notificationConnection(): Promise<NotificationConnection>;
+  authorizeNotification(): Promise<string>;
+  disconnectNotification(): Promise<void>;
 }
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly validationSummary?: string;
+  readonly rewriteGuidance?: string;
 
-  constructor(status: number) {
+  constructor(status: number, detail?: { validation_summary?: string; rewrite_guidance?: string }) {
     super(`요청을 처리하지 못했습니다. (${status})`);
     this.name = 'ApiError';
     this.status = status;
+    this.validationSummary = detail?.validation_summary;
+    this.rewriteGuidance = detail?.rewrite_guidance;
   }
 }
 
@@ -116,7 +141,11 @@ function defaultWait(milliseconds: number, signal?: AbortSignal): Promise<void> 
 }
 
 async function expectJson<T>(response: Response): Promise<T> {
-  if (!response.ok) throw new ApiError(response.status);
+  if (!response.ok) {
+    const payload = response.status === 422 ? await response.json().catch(() => null) : null;
+    const detail = payload?.detail;
+    throw new ApiError(response.status, detail && typeof detail === 'object' && !Array.isArray(detail) ? detail : undefined);
+  }
   return response.json() as Promise<T>;
 }
 
@@ -235,6 +264,46 @@ export function createApi(options: ApiOptions = {}): WebApi {
     async analysisDetail(symbol, id) {
       const response = await request(`/stocks/${encodeURIComponent(symbol)}/analysis/${id}`, { credentials: 'same-origin' });
       return expectJson<AnalysisResult>(response);
+    },
+
+    async runAnalysis(symbol) {
+      return expectJson<AnalysisResult>(await request(`/stocks/${encodeURIComponent(symbol)}/analysis`, {
+        method: 'POST', credentials: 'same-origin',
+      }));
+    },
+
+    async alertConditions() {
+      return expectJson<AlertCondition[]>(await request('/alert-conditions', { credentials: 'same-origin' }));
+    },
+
+    async addAlertCondition(symbol, userRule) {
+      return expectJson<AlertCondition>(await request('/alert-conditions', {
+        method: 'POST', credentials: 'same-origin', headers: jsonHeaders,
+        body: JSON.stringify({ symbol, user_rule: userRule }),
+      }));
+    },
+
+    async removeAlertCondition(id) {
+      const response = await request(`/alert-conditions/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+      if (!response.ok) throw new ApiError(response.status);
+    },
+
+    async notificationConnection() {
+      return expectJson<NotificationConnection>(await request('/notification-connections/kakao', { credentials: 'same-origin' }));
+    },
+
+    async authorizeNotification() {
+      const response = await request('/notification-connections/kakao/authorize', {
+        method: 'POST', credentials: 'same-origin', headers: jsonHeaders,
+        body: JSON.stringify({ client: 'web' }),
+      });
+      const result = await expectJson<{ authorization_url: string }>(response);
+      return result.authorization_url;
+    },
+
+    async disconnectNotification() {
+      const response = await request('/notification-connections/kakao', { method: 'DELETE', credentials: 'same-origin' });
+      if (!response.ok) throw new ApiError(response.status);
     },
   };
 }

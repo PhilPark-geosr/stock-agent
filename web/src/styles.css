@@ -149,9 +149,32 @@ h2 { margin: 0; font: 500 30px/1.1 Georgia, "Times New Roman", serif; letter-spa
 
 .service-intro { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 60px; align-items: end; }
 .service-intro h1 { font-size: clamp(42px, 5vw, 64px); }
-.watchlist-panel, .history-panel { margin-top: 34px; padding: clamp(22px, 4vw, 40px); border: 1px solid rgba(24, 55, 47, .12); background: rgba(255,255,255,.27); }
+.watchlist-panel, .history-panel, .analysis-panel, .conditions-panel, .notification-panel { margin-top: 34px; padding: clamp(22px, 4vw, 40px); border: 1px solid rgba(24, 55, 47, .12); background: rgba(255,255,255,.27); }
 .history-panel { background: #e5eadf; }
-.panel-heading { display: flex; justify-content: space-between; gap: 20px; }
+.panel-heading { display: flex; justify-content: space-between; align-items: start; gap: 20px; }
+.beta-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 30px; }
+.beta-nav a { padding: 10px 13px; border: 1px solid #b7c8bd; border-radius: 999px; color: #1c513f; font-size: 13px; font-weight: 700; text-decoration: none; }
+.beta-nav a:hover { background: #e5eadf; }
+.search-label { display: block; margin-top: 24px; font-size: 13px; font-weight: 700; }
+.watchlist-search, .condition-form input, .condition-form textarea { width: 100%; min-height: 48px; padding: 11px 13px; border: 1px solid #a9bbb4; border-radius: 4px; color: #18372f; background: #fffdf7; font: inherit; }
+.watchlist-search { margin-top: 8px; }
+.condition-form { display: grid; gap: 10px; margin-top: 22px; }
+.condition-form textarea { min-height: 105px; resize: vertical; }
+.condition-form .primary-button { justify-self: start; margin-top: 8px; }
+.condition-list { margin: 24px 0 0; padding: 0; list-style: none; }
+.condition-list li { display: flex; justify-content: space-between; gap: 20px; padding: 16px 0; border-top: 1px solid #c9d3cc; }
+.condition-list p { margin: 8px 0; }
+.condition-list small { color: #60716c; }
+.connection-state { margin: 22px 0; font-weight: 700; }
+.connection-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.analysis-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 24px 0; }
+.analysis-metrics div { padding: 13px; border: 1px solid rgba(255,255,255,.22); }
+.analysis-metrics dt { color: #bfd0c8; font-size: 12px; }
+.analysis-metrics dd { margin: 8px 0 0; font-size: 20px; font-weight: 700; }
+.analysis-time { color: #bfd0c8; font-size: 13px; }
+.system-signal { margin-top: 22px; padding: 14px; background: rgba(255,255,255,.1); }
+.system-signal h4 { margin-top: 0; }
+.system-signal small { color: #bfd0c8; }
 .symbol-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 14px; align-items: end; margin-top: 25px; }
 .symbol-form label { grid-column: 1 / -1; }
 .watchlist { margin: 24px 0 0; padding: 0; list-style: none; border-top: 1px solid #c9d3cc; }
@@ -196,4 +219,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid #dcaa38; outline-offs
   .symbol-form { grid-template-columns: 1fr; }
   .symbol-form .primary-button { width: 100%; }
   .history-list button { grid-template-columns: 1fr; gap: 5px; }
+  .panel-heading { flex-direction: column; }
+  .analysis-panel .primary-button, .condition-form .primary-button { width: 100%; }
+  .beta-nav { flex-wrap: wrap; }
+  .connection-actions { flex-direction: column; align-items: stretch; }
+  .condition-list li { align-items: start; }
 }

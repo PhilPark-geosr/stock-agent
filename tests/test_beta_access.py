@@ -219,6 +219,8 @@ def beta_web_client(db_session, monkeypatch, tmp_path):
     app = create_app(web_dist=tmp_path)
     app.dependency_overrides[get_db] = lambda: db_session
     with TestClient(app, base_url=ORIGIN) as client:
+        # Startup configuration reloads .env; keep this client's origin isolated.
+        monkeypatch.setenv("WEB_ORIGIN", ORIGIN)
         yield client
 
 

@@ -22,6 +22,9 @@ function apiWith(overrides: Partial<WebApi> = {}): WebApi {
     removeWatchlist: vi.fn().mockResolvedValue(undefined),
     analysisHistory: vi.fn().mockResolvedValue([]),
     analysisDetail: vi.fn().mockResolvedValue({ ...history[0], key_reasons: ['추세 회복'], risk_factors: ['변동성'], support_levels: {}, alert_reason: null, raw_result: { internal: 'hidden' } }),
+    runAnalysis: vi.fn(), alertConditions: vi.fn().mockResolvedValue([]), addAlertCondition: vi.fn(), removeAlertCondition: vi.fn(),
+    notificationConnection: vi.fn().mockResolvedValue({ connected: false, connection_id: null }),
+    authorizeNotification: vi.fn(), disconnectNotification: vi.fn(),
     ...overrides,
   };
 }
@@ -69,14 +72,13 @@ describe('beta web routes', () => {
   it('adds and removes watchlist items, then loads only saved history and its detail', async () => {
     const api = apiWith({ session: vi.fn().mockResolvedValue(betaMember), watchlist: vi.fn().mockResolvedValue(watchlist), analysisHistory: vi.fn().mockResolvedValue(history) });
     show(api, '/app');
-    expect(await screen.findByRole('button', { name: 'MSFT 분석 이력' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: 'MSFT 선택' })).toBeVisible();
     expect(api.analysisHistory).toHaveBeenCalledWith('MSFT');
-    fireEvent.click(screen.getByText('저장된 결과'));
     expect(await screen.findByRole('heading', { name: /MSFT · 매수 관망/ })).toBeVisible();
     expect(screen.queryByText('hidden')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('종목 코드'), { target: { value: 'AAPL' } });
+    fireEvent.change(screen.getByPlaceholderText('예: 005930.KS'), { target: { value: 'AAPL' } });
     fireEvent.click(screen.getByRole('button', { name: '종목 추가' }));
-    await waitFor(() => expect(api.addWatchlist).toHaveBeenCalledWith('AAPL'));
+    await waitFor(() => expect(api.addWatchlist).toHaveBeenCalledWith('AAPL.KS'));
     fireEvent.click(screen.getByRole('button', { name: 'MSFT 삭제' }));
     await waitFor(() => expect(api.removeWatchlist).toHaveBeenCalledWith('MSFT'));
   });

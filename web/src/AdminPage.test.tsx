@@ -17,6 +17,8 @@ function apiWith(issue: WebApi['issue']): WebApi {
     removeWatchlist: vi.fn(),
     analysisHistory: vi.fn(),
     analysisDetail: vi.fn(),
+    runAnalysis: vi.fn(), alertConditions: vi.fn(), addAlertCondition: vi.fn(), removeAlertCondition: vi.fn(),
+    notificationConnection: vi.fn(), authorizeNotification: vi.fn(), disconnectNotification: vi.fn(),
   };
 }
 

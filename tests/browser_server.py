@@ -116,14 +116,14 @@ if __name__ == "__main__":
             )
         db.add_all([
             AnalysisResult(
-                symbol="AAPL",
+                symbol="AAPL.KS",
                 analyzed_at=datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc),
                 data_timestamp=datetime(2026, 9, 27, 11, 55, tzinfo=timezone.utc),
                 overall_judgment="관망",
                 summary="브라우저 테스트용 최근 공용 분석입니다.",
                 key_reasons=["현금 흐름이 안정적입니다.", "단기 변동성이 높습니다."],
                 risk_factors=["시장 변동성"],
-                support_levels={"support": 225, "resistance": 240},
+                support_levels={"latest_close": 230, "change_percent": 1.5, "volume_ratio_20": 1.2, "low_20": 220, "high_20": 240},
                 should_alert=False,
                 triggered_alerts=[],
                 alert_reason=None,
@@ -131,7 +131,7 @@ if __name__ == "__main__":
                 shared_safe=True,
             ),
             AnalysisResult(
-                symbol="AAPL",
+                symbol="AAPL.KS",
                 analyzed_at=datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc),
                 data_timestamp=datetime(2026, 9, 26, 11, 55, tzinfo=timezone.utc),
                 overall_judgment="매수 관심",

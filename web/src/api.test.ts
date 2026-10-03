@@ -33,6 +33,40 @@ describe('HTTP boundary', () => {
     expect(request.mock.calls[1][0]).toBe('/stocks/MSFT/analysis?limit=20&offset=20');
     expect(request.mock.calls[1][1]).toEqual({ credentials: 'same-origin' });
   });
+
+  it('uses existing beta APIs for manual analysis, conditions, and Kakao connection', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(response(201, { id: 3, symbol: '005930.KS' }))
+      .mockResolvedValueOnce(response(200, []))
+      .mockResolvedValueOnce(response(201, { id: 4, symbol: '005930.KS' }))
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(200, { connected: false, connection_id: null }))
+      .mockResolvedValueOnce(response(200, { authorization_url: 'https://kauth.kakao.com/authorize' }))
+      .mockResolvedValueOnce(response(204));
+    const api = createApi({ request });
+    await api.runAnalysis('005930.KS');
+    await api.alertConditions();
+    await api.addAlertCondition('005930.KS', '가격이 오르면 알림');
+    await api.removeAlertCondition(4);
+    await api.notificationConnection();
+    expect(await api.authorizeNotification()).toBe('https://kauth.kakao.com/authorize');
+    await api.disconnectNotification();
+
+    expect(request.mock.calls.map(call => call[0])).toEqual([
+      '/stocks/005930.KS/analysis', '/alert-conditions', '/alert-conditions', '/alert-conditions/4',
+      '/notification-connections/kakao', '/notification-connections/kakao/authorize', '/notification-connections/kakao',
+    ]);
+    expect(request.mock.calls[0][1]).toMatchObject({ method: 'POST', credentials: 'same-origin' });
+    expect(JSON.parse(request.mock.calls[2][1].body)).toEqual({ symbol: '005930.KS', user_rule: '가격이 오르면 알림' });
+    expect(JSON.parse(request.mock.calls[5][1].body)).toEqual({ client: 'web' });
+  });
+
+  it('exposes only structured condition validation guidance from a 422 response', async () => {
+    const request = vi.fn().mockResolvedValue(response(422, { detail: { validation_summary: '조건이 모호합니다', rewrite_guidance: '가격 기준을 명시하세요' } }));
+    await expect(createApi({ request }).addAlertCondition('MSFT', '언젠가 알려줘')).rejects.toMatchObject({
+      status: 422, validationSummary: '조건이 모호합니다', rewriteGuidance: '가격 기준을 명시하세요',
+    });
+  });
 });
 
 describe('browser login', () => {

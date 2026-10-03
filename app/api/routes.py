@@ -1,7 +1,8 @@
+import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -79,6 +80,10 @@ class LoginAttemptExchange(BaseModel):
     verifier: str
 
 
+class NotificationAuthorizeRequest(BaseModel):
+    client: str
+
+
 def _account_payload(account):
     return {
         "id": account.id,
@@ -141,10 +146,14 @@ def delete_auth_session(credentials: HTTPAuthorizationCredentials | None = Depen
 
 @router.post("/notification-connections/kakao/authorize")
 def authorize_kakao_notification(
+    payload: NotificationAuthorizeRequest | None = Body(default=None),
     account: UserAccount = Depends(require_beta_mutation),
     service=Depends(get_notification_connection_service),
 ):
-    return {"authorization_url": service.authorize(account.id)}
+    client = payload.client if payload else "electron"
+    if client not in {"electron", "web"}:
+        raise HTTPException(status_code=422, detail="unsupported notification client")
+    return {"authorization_url": service.authorize(account.id, client=client)}
 
 
 @router.get("/notification-connections/kakao")
@@ -173,13 +182,22 @@ def delete_kakao_notification_connection(
 @router.get("/notification-connections/kakao/callback", response_class=HTMLResponse)
 def complete_kakao_notification_connection(
     request: Request,
-    code: str,
+    code: str | None = None,
     state_value: str = Query(alias="state"),
+    error: str | None = None,
     service=Depends(get_notification_connection_service),
     db: Session = Depends(get_db),
 ):
     try:
-        owner_id = service.owner_id_from_state(state_value)
+        context = service.context_from_state(state_value)
+    except NotificationConnectionError as exc:
+        return HTMLResponse(f"알림 연결에 실패했습니다: {exc}", status_code=400)
+
+    client = context["client"]
+    try:
+        if error or not code:
+            raise NotificationConnectionError("Kakao authorization was not completed")
+        owner_id = context["owner_id"]
         account = db.get(UserAccountRecord, owner_id)
         if account is None or account.login_provider != "kakao":
             raise NotificationConnectionError(
@@ -191,7 +209,13 @@ def complete_kakao_notification_connection(
             expected_subject_id=account.provider_subject_id,
         )
     except NotificationConnectionError as exc:
+        if client == "web":
+            origin = os.getenv("WEB_ORIGIN", "http://127.0.0.1:8000").rstrip("/")
+            return RedirectResponse(f"{origin}/app?notification_connection=failed", status_code=303)
         return HTMLResponse(f"알림 연결에 실패했습니다: {exc}", status_code=400)
+    if client == "web":
+        origin = os.getenv("WEB_ORIGIN", "http://127.0.0.1:8000").rstrip("/")
+        return RedirectResponse(f"{origin}/app?notification_connection=connected", status_code=303)
     return HTMLResponse("알림 연결이 완료되었습니다. 앱으로 돌아가세요.")
 
 
