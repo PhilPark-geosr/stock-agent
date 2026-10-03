@@ -77,6 +77,26 @@ class AuthSessionRecord(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class InvitationRecord(Base):
+    __tablename__ = "invitations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BetaAccessGrantRecord(Base):
+    __tablename__ = "user_beta_access_grants"
+    account_id: Mapped[str] = mapped_column(
+        ForeignKey("user_accounts.id"), primary_key=True
+    )
+    invitation_id: Mapped[str] = mapped_column(
+        ForeignKey("invitations.id"), unique=True, nullable=False
+    )
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class AnalysisResult(Base):
     __tablename__ = "analysis_results"
 

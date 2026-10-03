@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from cryptography.fernet import Fernet
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -37,6 +37,18 @@ from app.application.notification_connections import KakaoNotificationConnection
 
 
 bearer = HTTPBearer(auto_error=False)
+COOKIE_NAME = "stock_agent_session"
+
+
+def is_operator(account: UserAccount) -> bool:
+    configured = os.getenv("ADMIN_ACCOUNT_ID", "").strip()
+    return bool(configured) and account.id == configured
+
+
+def require_web_origin(request: Request) -> None:
+    expected = os.getenv("WEB_ORIGIN", "http://127.0.0.1:8000").rstrip("/")
+    if request.headers.get("origin") != expected:
+        raise HTTPException(status_code=403, detail="Untrusted web origin")
 
 
 def get_rule_validation_agent() -> RuleValidationAgent:
@@ -68,15 +80,50 @@ def get_session_service(db: Session = Depends(get_db)) -> SessionService:
 
 
 def get_current_account(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     sessions: SessionService = Depends(get_session_service),
 ) -> UserAccount:
-    if credentials is None:
+    if credentials is not None:
+        token = credentials.credentials
+        request.state.auth_via_cookie = False
+    else:
+        token = request.cookies.get(COOKIE_NAME)
+        request.state.auth_via_cookie = token is not None
+    if not token:
         raise HTTPException(status_code=401, detail="authentication required")
     try:
-        return sessions.authenticate(credentials.credentials)
+        return sessions.authenticate(token)
     except AttemptUnauthorized as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+def require_beta_access(
+    account: UserAccount = Depends(get_current_account),
+) -> UserAccount:
+    if not account.has_beta_access:
+        raise HTTPException(status_code=403, detail="Beta access required")
+    return account
+
+
+def require_beta_mutation(
+    request: Request,
+    account: UserAccount = Depends(require_beta_access),
+) -> UserAccount:
+    if getattr(request.state, "auth_via_cookie", False):
+        require_web_origin(request)
+    return account
+
+
+def require_operator_mutation(
+    request: Request,
+    account: UserAccount = Depends(get_current_account),
+) -> UserAccount:
+    if not is_operator(account):
+        raise HTTPException(status_code=403, detail="Operator permission required")
+    if getattr(request.state, "auth_via_cookie", False):
+        require_web_origin(request)
+    return account
 
 
 def get_login_attempt_service(

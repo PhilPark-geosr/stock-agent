@@ -41,3 +41,16 @@ def test_auth_attempt_and_session_endpoints(client) -> None:
     assert client.get("/auth/session", headers={"Authorization": "Bearer service-token"}).json()["id"] == "u1"
     assert client.delete("/auth/session", headers={"Authorization": "Bearer service-token"}).status_code == 204
     assert client.get("/auth/session").status_code == 401
+
+
+def test_browser_cannot_use_desktop_exchange_to_read_token(client):
+    attempts = FakeAttempts()
+    app.dependency_overrides[get_login_attempt_service] = lambda: attempts
+    for origin in ['http://127.0.0.1:8000', 'https://other.test', 'null']:
+        response = client.post('/auth/login-attempts/attempt-1/exchange',
+                               json={'verifier': 'ok'}, headers={'Origin': origin})
+        assert response.status_code == 403
+        assert 'service-token' not in response.text
+    desktop = client.post('/auth/login-attempts/attempt-1/exchange', json={'verifier': 'ok'})
+    assert desktop.status_code == 200
+    assert desktop.json()['session_token'] == 'service-token'

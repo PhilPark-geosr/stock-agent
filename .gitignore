@@ -8,3 +8,7 @@ __pycache__/
 node_modules/
 *.db
 .env
+web/dist/
+web/test-results/
+web/playwright-report/
+web/*.tsbuildinfo

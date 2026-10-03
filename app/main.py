@@ -2,10 +2,14 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 
 from app.api.routes import router
+from app.api.admin import router as admin_router
+from app.api.web_auth import router as web_auth_router
+from app.api.web_pages import register_web_pages
 from app.core.database import SessionLocal, init_db
 from app.core.scheduler_config import scheduler_settings
 from app.core.scheduler_runtime import start_scheduler
@@ -39,9 +43,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             pass
 
 
-def create_app() -> FastAPI:
+def create_app(*, web_dist: Path | None = None) -> FastAPI:
     api = FastAPI(title="Stock Analysis API", version="0.1.0", lifespan=lifespan)
     api.include_router(router)
+    api.include_router(web_auth_router)
+    api.include_router(admin_router)
+    register_web_pages(api, web_dist if web_dist is not None else Path(__file__).resolve().parents[1] / "web" / "dist")
     return api
 
 
