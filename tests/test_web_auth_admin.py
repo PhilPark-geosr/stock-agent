@@ -45,7 +45,9 @@ def test_real_operator_issues_one_invitation_without_beta_permission(web_client,
     who = account(db_session)
     monkeypatch.setenv('ADMIN_ACCOUNT_ID', who.id)
     login(web_client, db_session, who)
-    assert web_client.get('/auth/web/session').json() == {'id': who.id, 'login_provider': 'kakao', 'is_operator': True}
+    assert web_client.get('/auth/web/session').json() == {
+        'id': who.id, 'login_provider': 'kakao', 'is_operator': True, 'has_beta_access': False,
+    }
     response = web_client.post('/admin/invitations', headers={'Origin': ORIGIN})
     assert response.status_code == 201
     row = db_session.scalar(select(InvitationRecord))
@@ -95,7 +97,9 @@ def test_exchange_pending_success_reuse_logout_and_cookie(web_client, db_session
     service.complete(attempt.state, who)
     result = web_client.post(url, json={'verifier':'verifier'}, headers=headers)
     assert result.status_code == 200
-    assert result.json() == {'id': who.id, 'login_provider': 'kakao', 'is_operator': False}
+    assert result.json() == {
+        'id': who.id, 'login_provider': 'kakao', 'is_operator': False, 'has_beta_access': False,
+    }
     cookie = result.headers['set-cookie']
     assert all(part in cookie for part in ['HttpOnly', 'Secure', 'SameSite=lax', 'Path=/', 'Max-Age=2592000'])
     token = web_client.cookies.get(web_auth.COOKIE_NAME)

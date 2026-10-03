@@ -37,7 +37,7 @@ def test_known_legacy_database_is_stamped_without_losing_rows(tmp_path: Path) ->
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT symbol FROM watchlist_items WHERE id=1")) == "AAPL"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0009_invitations"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0010_beta_access_grants"
         columns = {column["name"] for column in inspect(engine).get_columns("watchlist_items")}
         assert {"user_account_id", "ended_at"} <= columns
         condition_columns = {
@@ -88,6 +88,7 @@ def test_previous_head_preserves_all_existing_rows(tmp_path: Path) -> None:
     with engine.connect() as connection:
         for name, rows in before.items():
             assert connection.execute(text(f'SELECT * FROM {name}')).all() == rows
-        assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '0009_invitations'
+        assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '0010_beta_access_grants'
     assert 'invitations' in inspect(engine).get_table_names()
+    assert 'user_beta_access_grants' in inspect(engine).get_table_names()
     engine.dispose()

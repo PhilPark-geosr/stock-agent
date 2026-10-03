@@ -142,7 +142,7 @@ def current_account(db_session) -> UserAccount:
         UserAccount.register(LoginIdentity("kakao", "test-user"))
     )
     WatchlistRepository(db_session).add(account.id, StockSymbol.of("005930.KS"))
-    return account
+    return UserAccount(account.id, account.login_identity, has_beta_access=True)
 
 
 @pytest.fixture
@@ -170,10 +170,10 @@ def client(
     app.dependency_overrides[get_market_data_provider] = lambda: market_data
     app.dependency_overrides[get_analysis_agent] = lambda: agent
     from app.api.routes import get_rule_validation_agent
-    from app.api.deps import get_current_account
+    from app.api.deps import get_current_account as get_current_account_dependency
 
     app.dependency_overrides[get_rule_validation_agent] = lambda: rule_validation_agent
-    app.dependency_overrides[get_current_account] = lambda: current_account
+    app.dependency_overrides[get_current_account_dependency] = lambda: current_account
     app.dependency_overrides[get_analysis_service] = override_analysis_service
     test_client = TestClient(app)
     try:

@@ -18,9 +18,11 @@ from app.api.deps import (
     get_login_attempt_service,
     get_session_service,
     get_login_service,
-    get_current_account,
     get_notification_connection_repository,
     get_notification_connection_service,
+    require_beta_access,
+    require_beta_mutation,
+    require_operator_mutation,
 )
 from app.application.auth_sessions import AttemptExpired, AttemptNotFound, AttemptPending, AttemptUnauthorized, LoginAttemptService, SessionService
 from app.application.login import LoginService
@@ -78,7 +80,11 @@ class LoginAttemptExchange(BaseModel):
 
 
 def _account_payload(account):
-    return {"id": account.id, "login_provider": account.login_identity.provider}
+    return {
+        "id": account.id,
+        "login_provider": account.login_identity.provider,
+        "has_beta_access": account.has_beta_access,
+    }
 
 
 @router.post("/auth/login-attempts", status_code=status.HTTP_201_CREATED)
@@ -135,7 +141,7 @@ def delete_auth_session(credentials: HTTPAuthorizationCredentials | None = Depen
 
 @router.post("/notification-connections/kakao/authorize")
 def authorize_kakao_notification(
-    account: UserAccount = Depends(get_current_account),
+    account: UserAccount = Depends(require_beta_mutation),
     service=Depends(get_notification_connection_service),
 ):
     return {"authorization_url": service.authorize(account.id)}
@@ -143,7 +149,7 @@ def authorize_kakao_notification(
 
 @router.get("/notification-connections/kakao")
 def get_kakao_notification_connection(
-    account: UserAccount = Depends(get_current_account),
+    account: UserAccount = Depends(require_beta_access),
     repository=Depends(get_notification_connection_repository),
 ):
     connection = repository.get_active(owner_id=account.id, channel="kakao")
@@ -155,7 +161,7 @@ def get_kakao_notification_connection(
 
 @router.delete("/notification-connections/kakao", status_code=status.HTTP_204_NO_CONTENT)
 def delete_kakao_notification_connection(
-    account: UserAccount = Depends(get_current_account),
+    account: UserAccount = Depends(require_beta_mutation),
     repository=Depends(get_notification_connection_repository),
 ):
     connection = repository.get_active(owner_id=account.id, channel="kakao")
@@ -258,7 +264,7 @@ def kakao_callback(
 @router.post("/watchlist", response_model=WatchlistItemRead, status_code=status.HTTP_201_CREATED)
 def add_watchlist_item(
     payload: WatchlistCreate,
-    account: UserAccount = Depends(get_current_account),
+    account: UserAccount = Depends(require_beta_mutation),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
 ):
     return watchlist_repository.add(account.id, StockSymbol.of(payload.symbol))
@@ -266,7 +272,7 @@ def add_watchlist_item(
 
 @router.get("/watchlist", response_model=list[WatchlistItemRead])
 def list_watchlist_items(
-    account: UserAccount = Depends(get_current_account),
+    account: UserAccount = Depends(require_beta_access),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
 ):
     return watchlist_repository.list(account.id)
@@ -275,7 +281,7 @@ def list_watchlist_items(
 @router.delete("/watchlist/{symbol}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_watchlist_item(
     symbol: str,
-    account: UserAccount = Depends(get_current_account),
+    account: UserAccount = Depends(require_beta_mutation),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
 ):
     deleted = watchlist_repository.delete(account.id, StockSymbol.of(symbol))
@@ -291,7 +297,7 @@ def delete_watchlist_item(
 )
 def create_alert_condition(
     payload: CustomAlertConditionCreate,
-    account: UserAccount = Depends(get_current_account),
+    account: UserAccount = Depends(require_beta_mutation),
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
     validation_agent: RuleValidationAgent = Depends(get_rule_validation_agent),
 ):
@@ -325,7 +331,7 @@ def create_alert_condition(
 
 @router.get("/alert-conditions", response_model=list[CustomAlertConditionRead])
 def list_alert_conditions(
-    account: UserAccount = Depends(get_current_account),
+    account: UserAccount = Depends(require_beta_access),
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
 ):
     return alert_condition_repository.list(account.id)
@@ -334,7 +340,7 @@ def list_alert_conditions(
 @router.delete("/alert-conditions/{condition_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_alert_condition(
     condition_id: int,
-    account: UserAccount = Depends(get_current_account),
+    account: UserAccount = Depends(require_beta_mutation),
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
 ):
     if not alert_condition_repository.delete(account.id, condition_id):
@@ -345,6 +351,7 @@ def delete_alert_condition(
 @router.post("/scheduler/run", response_model=ScheduledBatchResult)
 def run_scheduler(
     force: bool = Query(default=False, description="Skip market-hours check"),
+    account: UserAccount = Depends(require_operator_mutation),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
     try:
@@ -358,7 +365,7 @@ def list_analysis_history(
     symbol: str,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    account: UserAccount = Depends(get_current_account),
+    account: UserAccount = Depends(require_beta_access),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
@@ -376,7 +383,7 @@ def list_analysis_history(
 )
 def run_manual_analysis(
     symbol: str,
-    account: UserAccount = Depends(get_current_account),
+    account: UserAccount = Depends(require_beta_mutation),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
@@ -397,7 +404,9 @@ def run_manual_analysis(
 @router.get("/stocks/{symbol}/analysis/latest", response_model=AnalysisResultRead)
 def get_latest_analysis(
     symbol: str,
-    account: UserAccount = Depends(get_current_account),
+    # This legacy GET lazily creates analysis on a cache miss. Cookie callers
+    # therefore need the same Origin protection as explicit mutations.
+    account: UserAccount = Depends(require_beta_mutation),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):
@@ -419,7 +428,7 @@ def get_latest_analysis(
 def get_analysis_by_id(
     symbol: str,
     result_id: int,
-    account: UserAccount = Depends(get_current_account),
+    account: UserAccount = Depends(require_beta_access),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
     analysis_service: AnalysisProvider = Depends(get_analysis_service),
 ):

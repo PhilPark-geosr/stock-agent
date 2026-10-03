@@ -22,15 +22,38 @@ def register_web_pages(app: FastAPI, directory: Path) -> None:
     def login_page():
         return page()
 
-    @app.get('/admin', include_in_schema=False)
-    def admin_page(request: Request, sessions: SessionService = Depends(get_session_service)):
+    def account_or_redirect(request: Request, sessions: SessionService):
         token = request.cookies.get(COOKIE_NAME)
         try:
             if not token:
                 raise AttemptUnauthorized('Login required')
-            account = sessions.authenticate(token)
+            return sessions.authenticate(token)
         except AttemptUnauthorized:
             return RedirectResponse('/login', status_code=303, headers={'Cache-Control': 'no-store'})
+
+    @app.get('/invite', include_in_schema=False)
+    def invite_page(request: Request, sessions: SessionService = Depends(get_session_service)):
+        account = account_or_redirect(request, sessions)
+        if isinstance(account, RedirectResponse):
+            return account
+        if account.has_beta_access:
+            return RedirectResponse('/app', status_code=303, headers={'Cache-Control': 'no-store'})
+        return page()
+
+    @app.get('/app', include_in_schema=False)
+    def application_page(request: Request, sessions: SessionService = Depends(get_session_service)):
+        account = account_or_redirect(request, sessions)
+        if isinstance(account, RedirectResponse):
+            return account
+        if not account.has_beta_access:
+            return RedirectResponse('/invite', status_code=303, headers={'Cache-Control': 'no-store'})
+        return page()
+
+    @app.get('/admin', include_in_schema=False)
+    def admin_page(request: Request, sessions: SessionService = Depends(get_session_service)):
+        account = account_or_redirect(request, sessions)
+        if isinstance(account, RedirectResponse):
+            return account
         # The public shell contains no account data. React renders the denial and
         # the user's own ID after its authenticated session request.
         return page(200 if is_operator(account) else 403)
