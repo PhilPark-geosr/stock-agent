@@ -68,6 +68,8 @@ test('operator logs in, issues persisted invitation, copies, refreshes and logs 
   await page.getByRole('button', { name: '카카오로 로그인' }).click()
   const popup = await popupPromise
   await popup.waitForURL(/\/auth\/kakao\/callback/)
+  await expect(page).toHaveURL(/\/invite$/)
+  await page.getByRole('link', { name: '초대 발급' }).click()
   await expect(page).toHaveURL(/\/admin$/)
   const session = await page.request.get('/auth/web/session')
   expect(await session.json()).toMatchObject({ id: 'browser-test-operator', is_operator: true })
@@ -100,11 +102,11 @@ test('operator logs in, issues persisted invitation, copies, refreshes and logs 
   await expect(page).toHaveURL(/\/login/)
 })
 
-test('member session can view its account but cannot issue invitations', async ({ page, context }) => {
-  await context.addCookies([sessionCookie(savedSession('browser-test-member', new Date(Date.now() + 60_000)))])
+test('member without beta access is sent to registration and cannot issue invitations', async ({ page, context }) => {
+  await context.addCookies([sessionCookie(savedSession('browser-test-unregistered-member', new Date(Date.now() + 60_000)))])
   await page.goto('/admin')
-  await expect(page).toHaveURL(/\/admin$/)
-  await expect(page.getByText('browser-test-member')).toBeVisible()
+  await expect(page).toHaveURL(/\/invite$/)
+  await expect(page.getByText('browser-test-unregistered-member')).toBeVisible()
   await expect(page.getByRole('button', { name: '초대 코드 발급', exact: true })).toHaveCount(0)
   const response = await page.request.post('/admin/invitations', {
     headers: { Origin: 'http://127.0.0.1:8765' },
