@@ -12,6 +12,41 @@
 
 로그인 신원, 운영자 권한, 베타 이용 권한은 별도 개념이다. 서버는 서비스 API에서 로그인·베타 권한·기존 소유권 제한을 확인한다. 쿠키 인증의 변경 요청에는 기존 Origin 검사를 적용하고 Electron Bearer 인증도 베타 이용 권한 검사를 따른다. 운영 작업은 운영자 권한으로 보호한다.
 
+```mermaid
+sequenceDiagram
+    actor User as 로그인한 사용자
+    participant System as 베타 서비스
+    User->>System: 초대 등록을 요청한다(코드)
+    alt 등록 가능한 코드
+        System-->>User: 베타 이용 권한 부여 완료
+    else 미발급, 만료 또는 사용된 코드
+        System-->>User: 사용할 수 없는 코드
+    end
+```
+
+이 시스템 시퀀스 다이어그램은 외부에서 관찰하는 요청과 응답만 표현한다. 내부 협력은 아래와 같으며 메서드명은 설계용 메시지 표기다.
+
+```mermaid
+sequenceDiagram
+    participant Registration as 초대등록서비스
+    participant Validator as 초대코드검증기
+    participant Repository as 초대 등록 저장소
+    participant Invitation as 개별 초대
+    Registration->>Validator: 사용 가능한지 확인해 줘(코드, 현재 시각)
+    Validator->>Repository: 해당 초대를 찾아줘(코드)
+    Repository-->>Validator: 초대 또는 없음
+    opt 초대가 존재함
+        Validator->>Invitation: canUse(현재 시각)
+        Invitation-->>Validator: 가능 또는 불가능
+    end
+    Validator-->>Registration: 검증 결과
+    opt 검증 성공
+        Registration->>Repository: 사용 확정과 권한 부여를 함께 완료해 줘
+        Note over Repository: 사용 가능 조건 재확인, 원자적 저장
+        Repository-->>Registration: 등록 완료 또는 경쟁에 의한 실패
+    end
+```
+
 ## 웹 계약
 
 - 세션 응답에 `has_beta_access: boolean`을 추가한다.
@@ -42,3 +77,15 @@
 - 실제 FastAPI와 React를 연결한 브라우저 테스트에서 운영자 발급 → 일반 사용자 등록 → 메인 화면 → 관심종목 → 저장된 분석 조회 → 재접속을 검증한다. 외부 카카오·AI는 대역으로 하고 실제 유료 호출은 하지 않는다.
 
 마지막에 전체 회귀·웹 빌드를 확인하고 기존 로컬 설정과 DB를 보존해 서버를 재시작한다. 실제 접속 주소와 남은 제약을 사용자에게 전달한다.
+
+## 구현 및 검증 기록
+
+초대 사용과 베타 권한 부여는 단일 저장 트랜잭션으로 구현했다. 코드의 사전 판단은 저장소에서 찾은 개별 초대의 `can_use`에 맡기고, 사용 확정 시 미사용·미만료 조건을 다시 검사한다. 계정별 베타 권한은 운영자 설정과 분리해 저장한다. 기존 사용자·분석·알림 데이터의 마이그레이션 보존을 검증했다.
+
+React는 로그인 후 권한에 따라 `/invite` 또는 `/app`으로 안내한다. 메인에서는 관심종목 관리와 저장된 공통 분석 이력·상세 조회만 제공한다. 기존 운영자 발급 화면은 별도로 유지한다.
+
+검증 결과: Python 전체 134개, 집중 베타 48개, 기존 Electron 15개, React 27개, Playwright 통합 6개 통과. 웹 타입 검사와 프로덕션 빌드도 통과했다. 브라우저 통합은 실제 FastAPI와 빌드된 React, 임시 SQLite 및 카카오 대역을 사용했다. 운영자 발급 → 다른 사용자 등록 → 관심종목·저장된 분석 조회 → 재로그인, 미발급·기사용 코드와 권한별 거부를 확인했다. 초기 브라우저 검증 실패는 입력칸 선택자의 모호성 때문이었으며 선택자를 좁혀 통과시켰다. 웹 화면 첫 구현의 테스트 선행 실패 기록은 확보되지 않았으므로 이 부분을 RED 선행으로 주장하지 않는다. 이후 발견한 비동기 화면 회귀는 실패 테스트를 먼저 추가하고 수정했다.
+
+실제 카카오 계정 로그인과 외부 데이터·AI 호출을 통한 신규 분석 생성은 자동 브라우저 테스트에서 대역으로 검증했다. 로컬 실제 서비스는 별도로 실행해 HTTP 응답과 DB 마이그레이션을 확인한다.
+
+로컬 `127.0.0.1:8000` 서버를 새 빌드로 재시작했다. `/login`은 200과 빌드 자산을 반환했고, 비로그인 `/invite`, `/app`, `/admin`은 `/login`으로 이동했다. 실제 SQLite는 마이그레이션 `0010_beta_access_grants`에 도달했으며 기존 운영자 계정과 초대 기록 1건이 보존되었다. 변경 전에 SQLite 온라인 백업을 만들었다. 현재 권한 부여 기록은 0건이므로 첫 사용자는 초대 코드를 등록해야 한다.

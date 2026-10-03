@@ -1,6 +1,6 @@
 # 웹 비공개 베타 출시 및 초대 설계
 
-상태: 요구사항, 초대 코드 발급 유스케이스·개념 모델·기본 협력, 초대 코드 검증 협력 합의 완료. React 웹 로그인·운영자 확인·초대 발급은 구현 대상으로 진행하며 검증 결과는 web_admin_implementation_plan.md에 기록한다. 코드 등록·사용 확정·권한 부여는 아직 구현하지 않았으며 후속 설계 대상이다.
+상태: 요구사항, 초대 코드 발급 유스케이스·개념 모델·기본 협력, 초대 코드 검증 협력 합의 완료. React 웹 로그인·운영자 확인·초대 발급의 구현 및 검증은 web_admin_implementation_plan.md에 기록한다. 후속 코드 등록·사용 확정·권한 부여와 웹 메인 화면의 책임, 구현 계획 및 검증 기록은 [web_beta_registration_plan.md](web_beta_registration_plan.md)를 따른다. 아래 후속 설계 항목 중 해당 문서에서 구현한 항목은 그 기록을 우선한다.
 관련 이슈: https://github.com/PhilPark-geosr/stock-agent/issues/35
 
 ## 1. 출시 방향
