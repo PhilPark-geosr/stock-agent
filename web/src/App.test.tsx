@@ -93,4 +93,16 @@ describe('beta web routes', () => {
     await waitFor(() => expect(api.logout).toHaveBeenCalledTimes(1));
     expect(await screen.findByRole('button', { name: '카카오로 로그인' })).toBeVisible();
   });
+
+  it('clears local beta state when logout finds the server session already expired', async () => {
+    const api = apiWith({
+      session: vi.fn().mockResolvedValue(betaMember),
+      logout: vi.fn().mockRejectedValue(new ApiError(401)),
+    });
+    show(api, '/app');
+    fireEvent.click(await screen.findByRole('button', { name: '로그아웃' }));
+    await waitFor(() => expect(api.logout).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole('button', { name: '카카오로 로그인' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: '내 관심 종목' })).not.toBeInTheDocument();
+  });
 });

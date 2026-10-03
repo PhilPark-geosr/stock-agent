@@ -32,4 +32,30 @@ describe('saved analysis selection', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('저장된 분석 이력을 불러오지 못했습니다');
     expect(screen.queryByText('이전 종목 결과')).not.toBeInTheDocument();
   });
+
+  it('does not leave the next symbol detail actions disabled when an earlier detail request stalls', async () => {
+    let resolveOldDetail!: (value: Awaited<ReturnType<WebApi['analysisDetail']>>) => void;
+    const oldHistory: AnalysisHistoryItem[] = [{ ...msftHistory[0], summary: 'MSFT stored result' }];
+    const newHistory: AnalysisHistoryItem[] = [{ ...msftHistory[0], id: 2, symbol: 'AAPL', summary: 'AAPL stored result' }];
+    const api = apiWith(vi.fn().mockImplementation((symbol: string) => Promise.resolve(symbol === 'MSFT' ? oldHistory : newHistory)));
+    api.analysisDetail = vi.fn().mockImplementation(() => new Promise(resolve => { resolveOldDetail = resolve; }));
+    render(<BetaAppPage api={api} session={session} onLogout={vi.fn()} onSessionExpired={vi.fn()} />);
+
+    fireEvent.click(await screen.findByText('MSFT stored result'));
+    fireEvent.click(screen.getByRole('button', { name: 'AAPL 분석 이력' }));
+    const nextDetail = await screen.findByText('AAPL stored result');
+    expect(nextDetail.closest('button')).toBeEnabled();
+
+    resolveOldDetail({ ...oldHistory[0], key_reasons: [], risk_factors: [], support_levels: {}, alert_reason: null, raw_result: null });
+  });
+
+  it('does not allow an add that a still-loading watchlist response could overwrite', async () => {
+    let resolveWatchlist!: (items: Awaited<ReturnType<WebApi['watchlist']>>) => void;
+    const api = apiWith(vi.fn());
+    api.watchlist = vi.fn().mockImplementation(() => new Promise(resolve => { resolveWatchlist = resolve; }));
+    render(<BetaAppPage api={api} session={session} onLogout={vi.fn()} onSessionExpired={vi.fn()} />);
+
+    expect(await screen.findByRole('button', { name: '종목 추가' })).toBeDisabled();
+    resolveWatchlist([]);
+  });
 });

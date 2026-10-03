@@ -31,8 +31,13 @@ export function BetaAppPage({ api, session, onLogout, onSessionExpired }: BetaAp
   const [detailLoading, setDetailLoading] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const selectedSymbolRef = useRef<string | null>(null);
+  const detailRequestRef = useRef(0);
 
-  useEffect(() => { selectedSymbolRef.current = selectedSymbol; }, [selectedSymbol]);
+  useEffect(() => {
+    selectedSymbolRef.current = selectedSymbol;
+    detailRequestRef.current += 1;
+    setDetailLoading(null);
+  }, [selectedSymbol]);
 
   function handleError(error: unknown, fallback: string) {
     if (error instanceof ApiError && error.status === 401) {
@@ -128,16 +133,18 @@ export function BetaAppPage({ api, session, onLogout, onSessionExpired }: BetaAp
 
   async function showDetail(item: AnalysisHistoryItem) {
     if (!selectedSymbol || detailLoading !== null) return;
+    const requestId = detailRequestRef.current + 1;
+    detailRequestRef.current = requestId;
     setDetailLoading(item.id);
     setMessage(null);
     const target = selectedSymbol;
     try {
       const result = await api.analysisDetail(target, item.id);
-      if (selectedSymbolRef.current === target) setDetail(result);
+      if (selectedSymbolRef.current === target && detailRequestRef.current === requestId) setDetail(result);
     } catch (error) {
-      if (selectedSymbolRef.current === target) handleError(error, '분석 상세 결과를 불러오지 못했습니다.');
+      if (selectedSymbolRef.current === target && detailRequestRef.current === requestId) handleError(error, '분석 상세 결과를 불러오지 못했습니다.');
     } finally {
-      setDetailLoading(null);
+      if (detailRequestRef.current === requestId) setDetailLoading(null);
     }
   }
 
@@ -158,7 +165,7 @@ export function BetaAppPage({ api, session, onLogout, onSessionExpired }: BetaAp
         <form className="symbol-form" onSubmit={add}>
           <label htmlFor="symbol">종목 코드</label>
           <input id="symbol" value={symbol} onChange={event => setSymbol(event.target.value)} placeholder="예: 005930.KS" autoCapitalize="characters" required />
-          <button className="primary-button" type="submit" disabled={adding}>{adding ? '추가 중…' : '종목 추가'}</button>
+          <button className="primary-button" type="submit" disabled={adding || loading}>{adding ? '추가 중…' : '종목 추가'}</button>
         </form>
         {loading ? <p className="loading" role="status">관심 종목을 불러오는 중…</p> : items.length === 0 ? <p className="empty-state">등록한 관심 종목이 없습니다. 종목 코드를 입력해 추가하세요.</p> : (
           <ul className="watchlist" aria-label="관심 종목 목록">

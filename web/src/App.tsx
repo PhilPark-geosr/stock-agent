@@ -54,7 +54,7 @@ function LoginPage({ api, onLogin }: { api: WebApi; onLogin: (session: Session) 
     {message && <p className="notice error" role="alert">{message}</p>}
     <button className="kakao-button" type="button" onClick={login} disabled={pending}><span aria-hidden="true">K</span>{pending ? '로그인 확인 중…' : '카카오로 로그인'}</button>
     <p className="privacy-note">로그인 후 내 계정 ID를 확인할 수 있습니다.</p>
-  </section><aside className="login-aside" aria-label="서비스 안내"><p>STOCK AGENT</p><blockquote>초대받은 사용자에게<br />저장된 분석 결과를 제공합니다.</blockquote><span>PRIVATE BETA · Seoul</span></aside></main>;
+  </section><aside className="login-aside" aria-label="서비스 안내"><p>STOCK AGENT</p><blockquote>초대받은 분께<br />저장된 분석 결과를 제공합니다.</blockquote><span>PRIVATE BETA · Seoul</span></aside></main>;
 }
 
 export function App({ api }: AppProps) {
