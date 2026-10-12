@@ -1,6 +1,8 @@
 # 종목 지정·검색 독립 설계
 
-2026-09-28 · v2.2 클래스 협력·상세 설계 보완 · [공유용 다이어그램·화면 예시](stock_matching_review.html)
+> 2026-10-05 확장: [세 사용처 검색 설계](stock_search_usage_design.md)와 [검색 설명서](stock_search_explainer.html)를 함께 읽는다. 기준정보의 쓰기·정기 갱신은 [별도 갱신 설계](security_catalog_refresh_design.md)가 소유한다. 이 문서의 신규 지정 가능성 검사는 등록용 기준이며, 과거 브리핑 조회의 범위·검증에는 확장 설계를 적용한다.
+
+2026-09-28 · v2.2 공통 설계 참고본 · 2026-10-07 경계 재검토 · [공유용 다이어그램·화면 예시](stock_matching_review.html)
 
 **목표:** 사용자가 종목명·코드·검증된 별칭으로 후보를 찾고, 원하는 하나의 상장종목을 명확히 지정한다. 이 기능의 결과는 **확정한 종목 정보**다.
 
@@ -74,9 +76,9 @@ flowchart LR
 | FR-S01-07 | 명시적 사용자 확인 후에만 지정 결과를 반환한다. 취소 또는 실패하면 새 지정 결과를 반환하지 않는다. | UC-S01 |
 | FR-S01-08 | 확정 결과는 어느 기능에서 요청했는지와 독립적인 종목 정보이며, 호출한 기능의 등록·조건·수신 상태를 변경하지 않는다. | UC-S01 |
 | FR-S01-09 | 후보를 관련도순, 표시 이름 오름차순·내림차순, 코드 오름차순으로 정렬한다. 순서 변경으로 자동 지정하거나 선택 대상을 바꾸지 않는다. | UC-S01, 사용자 정렬 요청 |
-| FR-M01-01 | 한국·미국 주식 정보를 독립적으로 갱신할 수 있다. | UC-S01 지원, D3=A |
-| FR-M01-02 | 비정상 원천 응답은 마지막 유효 정보를 훼손하지 않는다. 지연·장애와 정상 결과 없음을 구별한다. | UC-S01 지원 |
-| FR-M01-03 | 이름 변경·상장 상태 변경을 반영하되 코드 재사용을 같은 종목으로 오인하지 않는다. 과거 식별 기록을 덮어쓰지 않는다. | UC-S01 지원 |
+| FR-M01-01 | 국가별 기준정보를 읽을 수 있다. 갱신 구현 요구는 별도 설계 FR-U01로 이관. | UC-S01 지원, D3=A |
+| FR-M01-02 | 게시된 자료의 지연·이용 불가를 정상 0건과 구별한다. 유효본 보존·원천 검증은 갱신 설계 FR-U02가 소유한다. | UC-S01 지원 |
+| FR-M01-03 | 게시된 종목 식별·현재 상태·표기 이력을 읽어 코드 재사용을 오인하지 않는다. 이력 쓰기는 갱신 설계 FR-U03이 소유한다. | UC-S01 지원 |
 
 ## 4. 도메인 — 입력·후보·확정 결과를 구별
 
@@ -250,62 +252,9 @@ classDiagram
 
 `SecurityId`는 상장종목의 안정적인 내부 식별값이고 표시 코드와 다르다. `sourceIdentity`는 원천의 식별 근거, `validFrom/validTo`는 해당 코드 대응의 유효기간이다. `providerSymbols`는 기존 조회 계약용 검증된 공급자별 값이다. 코드 재사용 시 새 식별값을 사용한다. 같은 종목의 표시명 갱신은 정체성 변경이 아니며 반환값은 확정 시의 최신 검증 정보다.
 
-### 6.3 상세 클래스 — 기준정보·별칭 갱신
+### 6.3 기준정보 갱신 기능과의 경계
 
-검색 서비스와 갱신 책임이 **같은 SecurityCatalog 계약**을 사용한다. 아래는 6.2에서 생략한 쓰기 측 계약이며 별개의 동명 카탈로그를 만드는 것이 아니다. 저장 구현체·외부 공급자 구현체는 아직 선정하지 않았다.
-
-```mermaid
-classDiagram
-  class CatalogRefresh {
-    -source : SecurityCatalogSource
-    -catalog : SecurityCatalog
-    +refresh(country) RefreshStatus
-    -validate(batch) ValidationResult
-  }
-  class SecurityCatalogSource {
-    <<interface>>
-    +fetch(country) CatalogBatch
-  }
-  class SecurityCatalog {
-    <<interface>>
-    +publishVerified(batch) void
-    +recordFailure(country, reason) void
-  }
-  class CatalogBatch {
-    <<transfer data>>
-    +country : Country
-    +source : String
-    +observedAt : Instant
-    +securities : SecurityList
-    +aliases : AliasList
-  }
-  class ListedSecurity {
-    <<6.2 snapshot>>
-    +id : SecurityId
-  }
-  class SecurityAlias {
-    <<verified mapping>>
-    +securityId : SecurityId
-    +text : String
-    +locale : String
-    +source : String
-    +verifiedAt : Instant
-  }
-  CatalogRefresh ..> SecurityCatalogSource : fetch
-  CatalogRefresh ..> SecurityCatalog : publish or record failure
-  CatalogRefresh ..> CatalogBatch : validates
-  SecurityCatalogSource ..> CatalogBatch : returns
-  CatalogBatch "1" --> "0..*" ListedSecurity : incoming records
-  CatalogBatch "1" --> "0..*" SecurityAlias : incoming aliases
-  SecurityAlias "0..*" --> "1" ListedSecurity : identifies
-```
-
-- 외부 공급자는 실제 외부 시스템이고 `SecurityCatalogSource`는 **내부 인터페이스**다. 공급자에 연결할 어댑터가 이를 구현한다. 공급자가 미정이므로 특정 제품이나 새로운 외부 액터를 가정하지 않는다.
-- `CatalogRefresh`는 국가별 수집·완전성·종류·식별 대응·별칭 출처를 검증한다. `RefreshStatus=UPDATED/REJECTED/FAILED`; `ValidationResult`는 통과 여부와 사유를 담는 값이며 독립 서비스가 아니다.
-- `CatalogBatch`는 아직 반영되지 않은 입력 묶음이다. `ListedSecurity` 형태의 입력값도 검증 전에는 확정 가능한 기준정보가 아니다. 원천이 안정적 식별값을 제공하지 않으면 어댑터에서 기존 식별 이력과 대조하며, 식별을 입증하지 못한 항목을 자동 병합하지 않는다.
-- `publishVerified()`는 한 국가의 검증된 변경을 원자적으로 반영하고 기존 식별·코드 유효기간 이력을 보존하는 계약이다. 한 국가 실패가 다른 국가의 유효 자료를 지우지 않는다. 구체 DB 테이블·트랜잭션 구현은 이 계약을 만족하도록 정한다.
-- `recordFailure()`는 갱신 상태만 기록한다. 빈 응답·급감·불완전 수집만으로 종목을 대량 비활성화하지 않는다. 마지막 유효 자료가 있으면 STALE, 없으면 UNAVAILABLE로 알린다. 폐지가 검증된 종목은 신규 지정할 수 없다.
-- 별칭 레코드 하나는 한 상장종목만 가리킨다. 같은 `text`의 레코드 여러 개가 서로 다른 상장종목을 가리킬 수 있으므로 ‘구글’ 같은 중복 별칭을 한 종목으로 합치지 않는다. 검증되지 않은 번역이나 모델 출력은 `SecurityAlias`로 게시하지 않는다.
+검색은 게시된 기준정보와 식별 이력·검증된 별칭·자료 상태를 읽는다. 원천 수집·검증·게시·주기 실행은 [별도 갱신 설계](security_catalog_refresh_design.md)로 이동했다. 최신 읽기 계약은 [세 사용처 검색 설계 6절](stock_search_usage_design.md)에서 정의한다. 이 문서의 `SecurityCatalog` 읽기 책임은 그 `SecurityCatalogReader`에 해당한다.
 
 ### 6.4 OOD 추적표
 
@@ -321,9 +270,6 @@ classDiagram
 | `ListedSecurity` | S01-03/04, M01-03: 종류·상태·식별 이력; S01-02/08: 검증된 기존 조회값 |
 | `SelectedSecurity` → `ListedSecurity` | S01-07/08: 확인한 하나의 종목 스냅샷, 호출 기능과 독립적인 결과 |
 | `SecurityAlias` → `ListedSecurity` | S01-06, M01-03: 검증된 표기와 종목 대응 |
-| `CatalogRefresh` → `SecurityCatalogSource` | M01-01~03: 국가별 원천 수집·검증·실패 처리 |
-| `CatalogBatch` 및 레코드 관계 | M01-01~03: 국가별 검증·반영 단위, 유효 정보 보호 |
-| `SecurityCatalog` 게시·실패 계약 | M01-01~03: 부분 반영 방지·이력 보존·마지막 유효 자료 유지 |
 | 기존 controller/bridge/route/`StockSymbol`/repository 연결 | S01-02/08: 확정 결과를 기존 계약에 연결, 후속 권한·등록 책임은 호출 기능에 유지 |
 
 이 문서는 구현 전 설계다. 클래스·인터페이스의 제품 구현과 실시간 원천 검증은 후속 구현 작업에서 수행한다.
@@ -354,12 +300,12 @@ classDiagram
 
 ## 8. 구현 순서와 남은 확인
 
-1. 한국·미국 주식 기준정보와 검증된 한글 별칭 원천을 비교한다.
+1. 별도 갱신 기능의 게시 정보와 읽기 계약을 연결한다. 원천 선정·수집 구현은 갱신 설계에서 수행한다.
 2. 카탈로그·후보 탐색·지정 확인을 구현하고 독립 계약을 검증한다.
 3. 호출 화면에 공통 검색·지정 접점을 연결한다. 첫 적용 위치는 기존 기능 개발 흐름에서 정하며 별도 웹 이전 과제로 확대하지 않는다.
 4. 검증된 확정 결과를 기존 호출 계약에 연결한다. 호출 기능의 정책은 그대로 둔다.
 
-**현재 추가로 선택받을 사용자 기능 정책은 없다.** D3·D4는 확정됐다. 실제 기준정보/별칭 공급자는 아직 선정하지 않았으므로 구현 전에 지원 범위·식별 정확도·갱신·이용 조건을 확인해야 한다. 비용이나 사용자에게 보이는 제한이 생기면 구체적인 후보와 영향을 제시해 확인한다. 원천의 기술적 채택을 사용자에게 막연히 떠넘기지 않는다.
+**이 참고본에서 확정한 범위는 D3·D4다.** 이후 추가된 세 사용처의 확정 사항과 제안은 검색 설계 8절을, 운영 기본안은 갱신 설계 9절을 따른다. 실제 기준정보/별칭 공급자는 아직 선정하지 않았으므로 구현 전에 지원 범위·식별 정확도·갱신·이용 조건을 확인해야 한다. 비용이나 사용자에게 보이는 제한이 생기면 구체적인 후보와 영향을 제시해 확인한다. 원천의 기술적 채택을 사용자에게 막연히 떠넘기지 않는다.
 
 ## 9. 인수 기준과 설계 자체 검토
 
@@ -409,3 +355,5 @@ classDiagram
 - 이름/코드 정렬을 선택하면 관련도 점수를 정렬에 혼합하지 않는다. 후보를 고른 뒤 정렬을 바꾸어도 같은 종목 선택을 유지한다.
 - 검색어 변경이나 필터로 선택 후보가 사라지면 미확정 선택을 해제한다. 이미 확정한 결과는 새 후보를 명시적으로 확정하기 전까지 보존한다.
 - 결과가 없는 경우 선택한 검색 범위에서 일치하는 후보가 없음을 안내한다. 동일 별칭이 여러 주식 종류에 대응하면 각 후보를 구별해 제시한다.
+
+최신 검토 범위와 미확정 항목: [절대규칙 적용 검토](design_rules_audit.md). 이 참고본은 두 최신 기능 설계의 정책을 덮어쓰지 않는다.
