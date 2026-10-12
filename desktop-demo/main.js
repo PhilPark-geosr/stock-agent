@@ -84,7 +84,8 @@ async function requestBackend({ method = "GET", requestPath, body }) {
     throw new Error("Invalid backend request path");
   }
   await ensureBackend();
-  const result = await authenticatedRequest(`${API_BASE_URL}${requestPath}`, { method, body });
+  const timeout = method === "POST" && requestPath === "/briefings" ? 1800000 : 120000;
+  const result = await authenticatedRequest(`${API_BASE_URL}${requestPath}`, { method, body, timeout });
   return result.payload;
 }
 
@@ -156,7 +157,7 @@ function createWindow() {
     minWidth: 920,
     minHeight: 680,
     backgroundColor: "#e8eeeb",
-    title: "Stock Agent Demo",
+    title: "Stock Agent",
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -167,6 +168,10 @@ function createWindow() {
   });
 
   mainWindow = window;
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(console.error);
+    return { action: "deny" };
+  });
   window.once("closed", () => { if (mainWindow === window) mainWindow = null; });
   window.loadFile(path.join(__dirname, "src", "index.html"));
 }
