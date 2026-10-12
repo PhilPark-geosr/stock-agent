@@ -8,7 +8,7 @@ from typing import Callable
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.container import build_analysis_service
+from app.core.container import build_analysis_service, build_briefing_schedule_service
 from app.core.scheduler_config import scheduler_settings
 from app.services.scheduler import run_scheduled_batch
 
@@ -37,10 +37,6 @@ async def scheduler_loop(
 
     while not stop_event.is_set():
         try:
-            await sleep(interval_seconds)
-            if stop_event.is_set():
-                break
-
             db = session_factory()
             try:
                 result = run_scheduled_batch(build_analysis_service(db))
@@ -52,12 +48,22 @@ async def scheduler_loop(
                     )
                 elif result.skipped_reason:
                     logger.debug("Scheduled batch skipped: %s", result.skipped_reason)
+
+                briefing_result = build_briefing_schedule_service(db).run_due()
+                if briefing_result.generated_ids:
+                    logger.info(
+                        "Scheduled briefings done: ids=%s",
+                        briefing_result.generated_ids,
+                    )
             finally:
                 db.close()
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("Scheduled batch failed")
+
+        if not stop_event.is_set():
+            await sleep(interval_seconds)
 
     logger.info("Scheduler stopped")
 

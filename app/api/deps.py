@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException
+import hmac
+import os
+
+from fastapi import Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.container import (
     build_analysis_service,
+    build_briefing_service,
     get_alert_notifier,
     get_analysis_agent,
     get_market_data_provider,
@@ -22,7 +26,7 @@ from app.interfaces.repositories import (
 )
 from app.interfaces.rule_validation import RuleValidationAgent
 from app.repositories import AlertConditionRepository, WatchlistRepository
-from app.services import AnalysisProvider
+from app.services import AnalysisProvider, BriefingService
 from app.application.auth_sessions import LoginAttemptService, SessionService
 from app.application.login import LoginService
 from app.integrations.kakao_auth import KakaoAuthError, KakaoExternalLogin, build_authorize_url, kakao_settings
@@ -51,6 +55,13 @@ def get_analysis_service(
     )
 
 
+def get_briefing_service(
+    db: Session = Depends(get_db),
+    analysis_service: AnalysisProvider = Depends(get_analysis_service),
+) -> BriefingService:
+    return build_briefing_service(db, analysis_service=analysis_service)
+
+
 def get_watchlist_repository(db: Session = Depends(get_db)) -> WatchlistRepositoryInterface:
     return WatchlistRepository(db)
 
@@ -73,6 +84,16 @@ def get_current_account(
         return sessions.authenticate(credentials.credentials)
     except AttemptUnauthorized as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+def require_internal_operator(
+    internal_token: str | None = Header(default=None, alias="X-Internal-Token"),
+) -> None:
+    expected = os.getenv("INTERNAL_API_TOKEN", "").strip()
+    if not expected:
+        raise HTTPException(status_code=503, detail="internal execution is not configured")
+    if internal_token is None or not hmac.compare_digest(internal_token, expected):
+        raise HTTPException(status_code=403, detail="internal execution credential required")
 
 
 def get_login_attempt_service(

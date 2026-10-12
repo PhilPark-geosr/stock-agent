@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -15,6 +17,58 @@ from app.services.scheduler import run_scheduled_batch
 from tests.conftest import ALERT_WINDOW_UTC, FakeAnalysisAgent, FakeMarketDataProvider
 
 KST = ZoneInfo("Asia/Seoul")
+
+
+def test_scheduler_checks_due_work_before_first_sleep(monkeypatch):
+    from app.core import scheduler_runtime
+
+    calls = []
+    stop_event = asyncio.Event()
+
+    class FakeDb:
+        def close(self):
+            calls.append("close")
+
+    class FakeSchedule:
+        def run_due(self):
+            calls.append("briefing")
+            return SimpleNamespace(generated_ids=[])
+
+    async def stop_on_sleep(seconds):
+        calls.append("sleep")
+        stop_event.set()
+
+    monkeypatch.setattr(
+        scheduler_runtime,
+        "scheduler_settings",
+        lambda: {
+            "enabled": True,
+            "interval_minutes": 60,
+            "market_start_hour": 8,
+            "market_end_hour": 16,
+            "timezone": "Asia/Seoul",
+        },
+    )
+    monkeypatch.setattr(scheduler_runtime, "build_analysis_service", lambda db: object())
+    monkeypatch.setattr(
+        scheduler_runtime,
+        "run_scheduled_batch",
+        lambda service: calls.append("analysis") or SimpleNamespace(
+            ran=False, skipped_reason="not_due"
+        ),
+    )
+    monkeypatch.setattr(
+        scheduler_runtime, "build_briefing_schedule_service", lambda db: FakeSchedule()
+    )
+
+    asyncio.run(
+        scheduler_runtime.scheduler_loop(
+            lambda: FakeDb(), stop_event=stop_event, sleep=stop_on_sleep
+        )
+    )
+
+    assert calls[:3] == ["analysis", "briefing", "close"]
+    assert calls[-1] == "sleep"
 
 
 def subscribe(db_session, symbol: str = "005930.KS"):

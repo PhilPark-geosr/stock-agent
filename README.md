@@ -48,6 +48,7 @@ KAKAO_CLIENT_SECRET=
 - `KAKAO_CLIENT_SECRET`은 카카오 콘솔에서 시크릿을 활성화했을 때만 입력합니다.
 - `KAKAO_ACCESS_TOKEN`, `KAKAO_REFRESH_TOKEN`은 서비스 로그인 설정이 아닙니다. 로그인 과정에서 받은 카카오 토큰은 회원번호 확인 후 저장하지 않습니다.
 - 서버 시작 시 Alembic 마이그레이션이 자동으로 최신 리비전까지 적용됩니다.
+- 운영 적용 전에는 `docs/database_migration_runbook.md`의 백업·검증·복구 절차를 따릅니다.
 
 ## 실행
 
@@ -71,6 +72,33 @@ uv run uvicorn app.main:app --reload
 $env:STOCK_AGENT_API_URL = "https://stock-agent.example.com"
 npm start
 ```
+
+- `GET /health` - health check
+- `GET /watchlist` - list watchlist symbols
+- `POST /watchlist` - add a symbol, for example `{"symbol": "005930.KS"}`
+- `DELETE /watchlist/{symbol}` - remove a symbol
+- `POST /alert-conditions` - validate and save a natural-language custom alert condition
+- `GET /alert-conditions` - list saved custom alert conditions
+- `DELETE /alert-conditions/{condition_id}` - remove a custom alert condition
+- `GET /stocks/{symbol}/analysis/latest` - get the latest analysis, creating one when no cached result exists
+- `POST /internal/briefings/run` - generate a pre-market or post-market briefing; requires both a service session and `X-Internal-Token`
+- `GET /users/me/briefings` - list the current user's briefings
+- `GET /users/me/briefings/{id}` - get a briefing with ranked items and delivery state
+
+사용자 범위 API는 Electron이 보관한 Stock Agent 서비스 세션을 Bearer 토큰으로 전달하며,
+서버가 인증한 `UserAccount`를 소유권 기준으로 사용합니다. `X-User-Id` 헤더는 사용하지 않습니다.
+
+The background scheduler also checks KRX and US exchange sessions. It creates
+pre-market briefings during the configured lead window and post-market summaries
+after the calendar-confirmed close. Exchange holidays, early closes, and daylight
+saving transitions come from `exchange-calendars`. Passing `"force": true` to the
+internal run endpoint regenerates the existing daily briefing as a new version.
+
+수동 내부 실행을 활성화하려면 서버의 `INTERNAL_API_TOKEN`을 길고 임의적인 값으로 설정하고 요청의 `X-Internal-Token` 헤더에 같은 값을 전달합니다. 일반 사용자 클라이언트에는 이 값을 배포하지 않습니다.
+
+Security search, `@` mentions, and `#` filter resolution belong to the separate
+security-search context (PR #23). The briefing feature stores only the already
+resolved scope snapshot and does not parse search text.
 
 ## 로그인 흐름과 세션
 
