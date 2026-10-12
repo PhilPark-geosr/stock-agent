@@ -10,6 +10,7 @@ function createBriefingController({ backend }) {
   let options = null, saved = null, loadedMarket = null, loadVersion = 0, detailVersion = 0;
   let selected = new Set();
   const retryRequests = new Map();
+  const failedRetryRequests = new Map();
   const uuid = () => crypto.randomUUID();
   const text = (selector, value) => { el(selector).textContent = value; };
   const notify = (value) => { status.textContent = value; status.dataset.tone = "info"; };
@@ -104,6 +105,24 @@ function createBriefingController({ backend }) {
       try {
         await backend.redeliverBriefing(id, { request_id: retryRequests.get(id), acknowledge_unknown: unknown });
         retryRequests.delete(id); await select(id);
+      } catch (error) { message(error); } finally { setBusy(false); }
+    });
+    for (const [selector, related] of [["[data-previous-briefing]", run.previous], ["[data-original-briefing]", run.original]]) {
+      detail.querySelector(selector)?.addEventListener("click", () => select(related.id).catch(message));
+    }
+    detail.querySelector("[data-retry-failed]")?.addEventListener("click", async () => {
+      if (busy || !run.retryable_symbols?.length) return;
+      setBusy(true);
+      if (!failedRetryRequests.has(id)) failedRetryRequests.set(id, uuid());
+      notify("실패·자료 부족 종목만 현재 시점의 자료로 다시 분석하고 있습니다.");
+      try {
+        const retried = await backend.generateBriefing({ request_id: failedRetryRequests.get(id),
+          market: run.market, purpose: run.purpose, n: run.context.n,
+          symbols: run.retryable_symbols, original_id: id, retry_failed: true });
+        await refresh(); await select(retried.id);
+        if (retried.status !== "preparing") failedRetryRequests.delete(id);
+        notify(retried.failure_reason || (retried.status === "preparing" ? "아직 재시도 중입니다. 목록에서 진행 상태를 확인하세요."
+          : "재시도 결과를 확인하세요. 기존 성공 종목은 원본 결과에서 볼 수 있습니다."));
       } catch (error) { message(error); } finally { setBusy(false); }
     });
     detail.querySelector("[data-reanalyze]")?.addEventListener("click", async () => {

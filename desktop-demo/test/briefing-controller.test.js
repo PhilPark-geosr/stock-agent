@@ -6,7 +6,7 @@ const vm = require("node:vm");
 const { renderBriefingTargets } = require("../src/components/briefings/briefing-panel");
 const tick = () => new Promise(setImmediate);
 
-function fixture(backend) {
+function fixture(backend, detailControls = []) {
   const element = () => ({ value: "", checked: false, textContent: "", listeners: {}, children: [], dataset: {},
     addEventListener(name, action) { this.listeners[name] = action; },
     replaceChildren() { this.children = []; }, append(child) { this.children.push(child); },
@@ -19,6 +19,8 @@ function fixture(backend) {
     "[data-briefing-detail]": element(), "[data-more-briefings]": element(), "[data-save-briefing]": element(), "[data-refresh-briefing]": element() };
   for (const name of ["briefing-targets", "target-search", "generate-briefing", "selected-count", "briefing-summary", "purpose-hint", "generation-help", "delivery-summary", "saved-schedule", "source-notice", "kakao-hint", "select-all", "clear-selection", "manage-watchlist"])
     elements[`[data-${name}]`] = element();
+  const controls = Object.fromEntries(detailControls.map(name => [name, element()]));
+  elements["[data-briefing-detail]"].querySelector = name => controls[name] || null;
   const root = { querySelector: (name) => elements[name], querySelectorAll: () => [], isConnected: true };
   backend.briefingOptions ||= async () => ({ symbols: ["005930.KS", "000660.KS"], prompt_ready: true, timezone: "Asia/Seoul",
     purposes: { pre_market: { available: true, reason: "개장 전" }, post_market: { available: false, reason: "마감 후" } } });
@@ -27,7 +29,7 @@ function fixture(backend) {
     crypto: { randomUUID: () => `request-${++sequence}` }, window: { StockAgent: { renderBriefingTargets, renderBriefing: () => "<p>test</p>" } } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/controllers/briefing-controller.js"), "utf8"), browser);
   const controller = browser.window.StockAgent.createBriefingController({ backend });
-  return { controller, elements, form, submit: () => form.listeners.submit({ preventDefault() {} }),
+  return { controller, elements, form, controls, submit: () => form.listeners.submit({ preventDefault() {} }),
     choose: (symbol, checked = true) => elements["[data-briefing-targets]"].listeners.change({ target: { dataset: { targetSymbol: symbol }, checked, closest: () => null } }) };
 }
 
@@ -87,4 +89,35 @@ test("older briefing pages append without losing current history", async () => {
   assert.deepEqual(offsets, [0, 30]);
   assert.equal(s.elements["[data-briefing-history]"].children.length, 31);
   assert.equal(s.elements["[data-more-briefings]"].hidden, true);
+});
+
+
+test("failed-only retry excludes success, blocks double clicks and survives a lost response", async () => {
+  const calls = [], opened = [];
+  let reject;
+  const original = {id: "original", status: "partial", market: "KR", purpose: "pre_market",
+    context: {n: 20, symbols: ["005930.KS", "000660.KS"]}, retryable_symbols: ["000660.KS"], previous: {id: "previous"}};
+  const retried = {id: "retried", status: "completed", original: {id: "original"}};
+  const s = fixture({briefingSettings: async () => ({n: 2}), listBriefings: async () => [original],
+    briefingById: async id => { opened.push(id); return id === "retried" ? retried : original; },
+    generateBriefing: body => { calls.push(body); return calls.length === 1 ? new Promise((_, fail) => {reject = fail;}) : Promise.resolve(retried); }
+  }, ["[data-retry-failed]", "[data-previous-briefing]", "[data-original-briefing]"]);
+  await s.controller.load();
+  await s.elements["[data-briefing-history]"].children[0].listeners.click();
+  const click = () => s.controls["[data-retry-failed]"].listeners.click();
+  const pending = click(); await click();
+  assert.equal(calls.length, 1);
+  reject(new Error("connection lost")); await pending;
+  await click();
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].request_id, calls[1].request_id);
+  assert.equal(calls[0].retry_failed, true);
+  assert.equal(calls[0].original_id, "original");
+  assert.equal(calls[0].n, 20);
+  assert.deepEqual(Array.from(calls[0].symbols), ["000660.KS"]);
+  assert.equal(opened.at(-1), "retried");
+  await s.controls["[data-original-briefing]"].listeners.click();
+  assert.equal(opened.at(-1), "original");
+  await s.controls["[data-previous-briefing]"].listeners.click();
+  assert.equal(opened.at(-1), "previous");
 });

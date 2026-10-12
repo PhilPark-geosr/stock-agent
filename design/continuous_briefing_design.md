@@ -2,7 +2,7 @@
 
 작성일: 2026-09-14 · 상태: **v1.0 OOD 확정 — 구현 기준** · 기준: [AGENTS.md](../AGENTS.md)
 
-함께 읽기: [구현·실행 안내](../docs/continuous_briefing_implementation.md), [편집 가능한 분석 지침](../prompt.md).
+함께 읽기: [PR #30 누락 기능 보완](briefing_gap_completion_design.md), [구현·실행 안내](../docs/continuous_briefing_implementation.md), [편집 가능한 분석 지침](../prompt.md).
 
 사용자는 직전 브리핑에서 무엇을 판단했는지 이어서 확인하고, n일 차트와 새 공개자료를 근거로 지금의 판단과 변화 이유를 이해한다. 분석 관점은 `prompt.md`로 수정할 수 있고, 완성된 브리핑은 사용자가 연동한 카카오 채널로 전달한다.
 
