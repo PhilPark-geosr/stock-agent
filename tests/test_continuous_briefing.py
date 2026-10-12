@@ -352,3 +352,132 @@ def test_expired_delivery_becomes_unknown_and_incomplete_generation_fails(setup_
     s.clock.value += timedelta(minutes=11)
     assert s.service.recover(pending).status == "failed"
     assert len(s.model.calls) == 1
+
+
+def test_failed_only_retry_preserves_success_and_reuses_request(setup_briefing):
+    from copy import deepcopy
+    s = setup_briefing
+    WatchlistRepository(s.db).add(s.owner, StockSymbol.of("000660.KS"))
+    fetch = s.source.fetch
+    calls = []
+    def partly_missing(symbol, context):
+        calls.append(symbol)
+        if symbol == "000660.KS":
+            return [], [SourceStatus(symbol=symbol, source="test", kind="chart", status="failed")]
+        return fetch(symbol, context)
+    s.source.fetch = partly_missing
+    original = s.service.generate(s.owner, request())
+    frozen = deepcopy((original.context, original.snapshot, original.result))
+    assert s.service.history.payload(original)["retryable_symbols"] == ["000660.KS"]
+    # A valid hold verdict is successful and must not be analyzed again.
+    assert original.result["items"][0]["verdict"] == "보류"
+    def restored(symbol, context):
+        calls.append(symbol)
+        return fetch(symbol, context)
+    s.source.fetch = restored
+    s.clock.value += timedelta(minutes=1)
+    req = request(original_id=original.id, retry_failed=True).model_copy(update={"n": None})
+    retried = s.service.generate(s.owner, req)
+    assert calls == ["000660.KS", "005930.KS", "000660.KS"]
+    assert retried.status == "completed" and retried.original_id == original.id
+    assert retried.context["symbols"] == ["000660.KS"] and retried.context["n"] == 2
+    assert retried.context["cutoff_at"] != original.context["cutoff_at"]
+    assert s.model.calls[-1]["payload"]["analyze_symbols"] == ["000660.KS"]
+    assert s.service.generate(s.owner, req).id == retried.id
+    assert len(s.model.calls) == 2
+    original = s.service.history.get(s.owner, original.id)
+    assert (original.context, original.snapshot, original.result) == frozen
+    assert s.service.history.payload(retried)["original"]["verdicts"] == {"005930.KS": "보류"}
+    with pytest.raises(BriefingConflict):
+        s.service.generate(s.owner, request(original_id=original.id, retry_failed=True, symbols=["005930.KS"]))
+
+
+@pytest.mark.parametrize("failed_model", [False, True])
+def test_retry_of_wholly_deferred_or_failed_run(setup_briefing, failed_model):
+    s = setup_briefing
+    s.source.missing = not failed_model
+    s.model.error = RuntimeError("model unavailable") if failed_model else None
+    original = s.service.generate(s.owner, request())
+    assert original.status == ("failed" if failed_model else "deferred")
+    assert s.service.history.payload(original)["retryable_symbols"] == ["005930.KS"]
+    s.source.missing = False; s.model.error = None
+    retried = s.service.generate(s.owner, request(original_id=original.id, retry_failed=True))
+    assert retried.status == "completed" and retried.original_id == original.id
+    assert s.service.history.payload(retried)["retryable_symbols"] == []
+
+
+def test_retry_api_validates_owner_scope_conditions_and_current_watchlist(client, setup_briefing):
+    s = setup_briefing
+    app.dependency_overrides[get_briefings] = lambda: s.service
+    def post(**values):
+        return client.post("/briefings", json=request(**values).model_dump(mode="json"))
+    assert post(retry_failed=True).status_code == 422
+    assert post(retry_failed=True, original_id="missing").status_code == 404
+    completed = s.service.generate(s.owner, request())
+    assert post(retry_failed=True, original_id=completed.id).status_code == 409
+    s.source.missing = True
+    original = s.service.generate(s.owner, request())
+    with pytest.raises(LookupError):
+        s.service.generate("another-owner", request(retry_failed=True, original_id=original.id))
+    for changes in ({"n": 3}, {"market": "US"}, {"purpose": "post_market"}):
+        body = request(retry_failed=True, original_id=original.id).model_copy(update=changes)
+        assert client.post("/briefings", json=body.model_dump(mode="json")).status_code == 409
+    WatchlistRepository(s.db).delete(s.owner, StockSymbol.of("005930.KS"))
+    assert post(retry_failed=True, original_id=original.id).status_code == 422
+
+
+def test_partial_public_source_does_not_retry_valid_decision(setup_briefing):
+    s = setup_briefing
+    fetch = s.source.fetch
+    def partial(symbol, context):
+        facts, sources = fetch(symbol, context)
+        return facts, sources + [SourceStatus(symbol=symbol, source="news", kind="news", status="failed")]
+    s.source.fetch = partial
+    row = s.service.generate(s.owner, request())
+    assert row.status == "partial"
+    assert s.service.history.payload(row)["retryable_symbols"] == []
+
+
+def test_comparison_priority_uses_verified_change_distance_recency_and_symbol(setup_briefing):
+    s = setup_briefing
+    symbols = ["000660.KS", "005930.KS", "035420.KS", "035720.KS", "051910.KS"]
+    for symbol in symbols:
+        if symbol != "005930.KS":
+            WatchlistRepository(s.db).add(s.owner, StockSymbol.of(symbol))
+    generate = s.model.generate
+    verdicts = {symbol: "보류" for symbol in symbols}
+    verdicts["051910.KS"] = "매도"
+    def analysis(**kwargs):
+        result = generate(**kwargs)
+        for item in result["items"]:
+            item["verdict"] = verdicts[item["symbol"]]
+            item["comparison"] = "변경"  # Model claims cannot override the real comparison.
+        return result
+    s.model.generate = analysis
+    morning = s.service.generate(s.owner, request())
+    assert all(i["comparison"] == "비교 불가" for i in morning.result["items"])
+    s.clock.value = datetime(2026, 9, 21, 7, tzinfo=timezone.utc)
+    for symbol in symbols[1:]:
+        verdicts[symbol] = "매수"
+    fetch = s.source.fetch
+    def recent_evidence(symbol, context):
+        facts, sources = fetch(symbol, context)
+        if symbol in ("035420.KS", "035720.KS"):
+            facts.append(Evidence(id="news:" + symbol, symbol=symbol, kind="news", source="test",
+                published_at=context.cutoff_at, collected_at=context.cutoff_at, text="새 자료"))
+        return facts, sources
+    s.source.fetch = recent_evidence
+    def cite_all(**kwargs):
+        result = analysis(**kwargs)
+        for item in result["items"]:
+            item["evidence_ids"] = [e["id"] for e in kwargs["payload"]["evidence"]["evidence"] if e["symbol"] == item["symbol"]]
+        return result
+    s.model.generate = cite_all
+    afternoon = s.service.generate(s.owner, request().model_copy(update={"purpose": "post_market"}))
+    assert [i["symbol"] for i in afternoon.result["items"]] == ["051910.KS", "035420.KS", "035720.KS", "005930.KS", "000660.KS"]
+    payload = s.service.history.payload(afternoon)
+    assert payload["previous"]["id"] == morning.id
+    assert payload["previous"]["purpose"] == "pre_market"
+    assert payload["previous"]["cutoff_at"] == morning.context["cutoff_at"]
+    assert payload["previous"]["verdicts"]["051910.KS"] == "매도"
+    assert s.service.history.related_summary("another-owner", morning.id) is None

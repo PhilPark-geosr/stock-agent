@@ -64,10 +64,16 @@ function renderBriefing(run) {
   return `<h3>${escape(run.trade_date)} ${run.purpose === "pre_market" ? "장전" : "장후"} · ${escape(labels[run.status] || run.status)}</h3>
     <p>관찰기간 ${escape(run.context.n)}거래일 · 기준 ${escape(run.context.cutoff_at)}</p>
     <p class="briefing-muted">분석 대상: ${(run.context.symbols || []).map(escape).join(" · ")}</p>
+    ${run.previous ? `<p>비교 기준: ${escape(run.previous.trade_date)} ${run.previous.purpose === "pre_market" ? "장전" : "장후"}
+      · ${escape(run.previous.n)}거래일 · 자료 기준 ${escape(run.previous.cutoff_at)}
+      <button type="button" data-previous-briefing>비교 기준 브리핑 보기</button></p>` : '<p>비교 가능한 직전 브리핑이 없습니다.</p>'}
+    ${run.original ? `<p>이 브리핑은 ${escape(run.original.trade_date)} ${run.original.purpose === "pre_market" ? "장전" : "장후"} 브리핑에서 새로 생성했습니다.
+      원본 결과는 그대로 보존됩니다. <button type="button" data-original-briefing>원본 결과 보기</button></p>` : ""}
     <p>카카오: ${escape(labels[run.delivery?.status] || "전달 대상 없음")} ${escape(run.delivery?.reason || "")}</p>
     ${run.failure_reason ? `<p role="alert">${escape(run.failure_reason)}</p>` : ""}
-    ${result ? `<p>${escape(result.summary)}</p>${result.items.map((item) => `<section class="briefing-item">
+    ${result ? `<p>${escape(result.summary)}</p><p class="briefing-muted">판단 변경 종목 우선 · 변화 폭, 인용 자료 시각, 종목 코드 순</p>${result.items.map((item) => `<section class="briefing-item">
       <h4>${escape(item.symbol)} · ${escape(item.verdict)}</h4><p>${escape(item.reason)}</p>
+      ${item.comparison !== "비교 불가" && run.previous?.verdicts?.[item.symbol] ? `<p>이전 판단 ${escape(run.previous.verdicts[item.symbol])} → 현재 판단 ${escape(item.verdict)}</p>` : ""}
       <p><strong>${escape(item.comparison)}</strong> ${escape(item.comparison_reason)}</p>
       <ul>${item.evidence_ids.map((id) => { const s = sources.find((e) => e.id === id); return s ? `<li>${sourceLink(s)} · ${escape(s.published_at)}<p>${escape(s.text)}</p></li>` : ""; }).join("")}</ul>
       <p>${item.limitations.map(escape).join(" · ")}</p><p>다음 관찰: ${escape(item.next_observation)}</p></section>`).join("")}` : ""}
@@ -76,6 +82,10 @@ function renderBriefing(run) {
       ${sources.filter((s) => s.kind === "chart").map((s) => `<h4>${escape(s.symbol)} 일봉</h4><table><thead><tr><th>거래일</th><th>시가</th><th>고가</th><th>저가</th><th>종가</th><th>거래량</th></tr></thead><tbody>${(s.data.candles || []).map((c) => `<tr>${[c.date,c.open,c.high,c.low,c.close,c.volume].map((v) => `<td>${escape(v)}</td>`).join("")}</tr>`).join("")}</tbody></table>`).join("")}</details>` : ""}
     ${run.prompt_content ? `<details><summary>이 브리핑에 사용한 분석 지침</summary><pre>${escape(run.prompt_content)}</pre></details>` : ""}
     ${["failed", "unknown", "not_connected", "not_requested", "cancelled"].includes(run.delivery?.status) ? `<button type="button" data-redeliver>기존 브리핑 다시 전달</button>` : ""}
+    ${run.retryable_symbols?.length ? `<p>실패·자료 부족: ${run.retryable_symbols.map(escape).join(" · ")}
+      <br>원본의 시장·목적·관찰기간으로 이 종목들만 현재 시점에서 다시 분석합니다. 성공한 종목은 원본에서 확인할 수 있습니다.
+      현재 관심종목과 생성 가능 시간에 해당해야 하며, 카카오 전달은 저장된 수신 설정을 따릅니다.</p>
+      <button type="button" data-retry-failed>실패·자료 부족 종목만 다시 분석</button>` : ""}
     <button type="button" class="secondary-button" data-reanalyze>이 종목으로 새 브리핑 준비</button>`;
 }
 const api = { BriefingPanel, renderBriefing, renderBriefingTargets };

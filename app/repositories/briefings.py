@@ -10,7 +10,7 @@ from app.domain.briefing_records import (
     BriefingDeliveryRecord, BriefingPreferenceRecord, BriefingRunRecord,
     PromptActivationRecord, PromptVersionRecord,
 )
-from app.domain.briefings import BriefingConflict, BriefingContext, BriefingSettings, LostClaim, utc
+from app.domain.briefings import BriefingConflict, BriefingContext, BriefingSettings, LostClaim, retryable_symbols, utc
 
 
 def now_utc():
@@ -136,6 +136,20 @@ class BriefingHistory:
     def delivery(self, run_id):
         return self.db.scalar(select(BriefingDeliveryRecord).where(BriefingDeliveryRecord.run_id == run_id))
 
+    def related_summary(self, owner, run_id):
+        if not run_id:
+            return None
+        try:
+            row = self.get(owner, run_id)
+        except LookupError:
+            return None
+        eligible = set((row.snapshot or {}).get("eligible_symbols", []))
+        return {"id": row.id, "trade_date": row.trade_date, "purpose": row.purpose,
+            "cutoff_at": row.context["cutoff_at"], "n": row.context["n"],
+            "symbols": row.context["symbols"], "verdicts": {
+                item["symbol"]: item["verdict"] for item in (row.result or {}).get("items", [])
+                if item["symbol"] in eligible}}
+
     def payload(self, row, *, detail=True):
         delivery = self.delivery(row.id)
         value = {"id": row.id, "market": row.market, "purpose": row.purpose,
@@ -147,5 +161,9 @@ class BriefingHistory:
                 "status": delivery.status, "reason": delivery.reason, "attempts": delivery.attempts}}
         if detail:
             prompt = self.db.get(PromptVersionRecord, row.prompt_id)
-            value.update(snapshot=row.snapshot, prompt_content=prompt.content)
+            value.update(snapshot=row.snapshot, prompt_content=prompt.content,
+                previous=self.related_summary(row.owner_id, row.previous_id),
+                original=self.related_summary(row.owner_id, row.original_id),
+                retryable_symbols=retryable_symbols(status=row.status, symbols=row.context["symbols"],
+                    snapshot=row.snapshot, result=row.result))
         return value
