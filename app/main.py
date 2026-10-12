@@ -8,6 +8,8 @@ from fastapi import FastAPI
 
 from app.api.routes import router
 from app.api.briefings import router as briefing_router
+from app.api.securities import router as securities_router
+from app.core.catalog_runtime import catalog_loop
 from app.core.briefing_runtime import briefing_loop
 from app.core.database import SessionLocal, init_db
 from app.core.scheduler_config import scheduler_settings
@@ -34,7 +36,18 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if os.getenv("BRIEFING_SCHEDULER_ENABLED", "true").lower() == "true":
         briefing_task = asyncio.create_task(briefing_loop(SessionLocal))
 
+    catalog_task = None
+    if os.getenv("CATALOG_SCHEDULER_ENABLED", "false").lower() == "true":
+        catalog_task = asyncio.create_task(catalog_loop(SessionLocal))
+
     yield
+
+    if catalog_task is not None:
+        catalog_task.cancel()
+        try:
+            await catalog_task
+        except asyncio.CancelledError:
+            pass
 
     if briefing_task is not None:
         briefing_task.cancel()
@@ -57,6 +70,7 @@ def create_app() -> FastAPI:
     api = FastAPI(title="Stock Analysis API", version="0.1.0", lifespan=lifespan)
     api.include_router(router)
     api.include_router(briefing_router)
+    api.include_router(securities_router)
     return api
 
 

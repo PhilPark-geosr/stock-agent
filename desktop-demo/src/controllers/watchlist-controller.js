@@ -6,7 +6,7 @@ function createWatchlistController({ backend, renderScreen, showToast, showView,
     const items = await backend.listWatchlist();
     state.stocks = items.map((item) => ({
       ...item,
-      name: item.symbol,
+      name: item.security_name || item.symbol,
       alertStatus: item.symbol === state.selectedSymbol ? "불러오는 중" : "분석 대기"
     }));
     if (!state.stocks.some((stock) => stock.symbol === state.selectedSymbol)) {
@@ -41,6 +41,7 @@ function createWatchlistController({ backend, renderScreen, showToast, showView,
   }
 
   function bindWatchlistEvents() {
+    const picker = window.StockAgent.createSecurityPicker({ root: document.querySelector("#catalog-security-picker"), backend, scope: "catalog" });
     document.querySelector("#search-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const input = document.querySelector("#search-input");
@@ -56,17 +57,16 @@ function createWatchlistController({ backend, renderScreen, showToast, showView,
 
     document.querySelector("#add-symbol-form").addEventListener("submit", async (event) => {
       event.preventDefault();
-      const input = document.querySelector("#add-symbol-input");
-      const rawSymbol = input.value.trim().toUpperCase();
-      if (!rawSymbol) {
-        showToast("추가할 종목 코드를 입력하세요.");
+      const selected = picker.selection();
+      if (!selected) {
+        showToast("검색 결과에서 등록할 종목을 선택하세요.");
         return;
       }
-      const symbol = /^\d{6}$/.test(rawSymbol) ? `${rawSymbol}.KS` : rawSymbol;
+      const symbol = selected.symbol;
       try {
-        await backend.addWatchlist(symbol);
+        await backend.addWatchlist(symbol, selected.security_id);
         state.selectedSymbol = symbol;
-        input.value = "";
+        picker.clear();
         showToast(`${symbol}을 관심종목에 추가했습니다.`);
         await loadWatchlist();
       } catch (error) {

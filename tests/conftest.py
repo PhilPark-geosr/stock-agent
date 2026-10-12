@@ -142,7 +142,17 @@ def current_account(db_session) -> UserAccount:
     account = SqlAlchemyUserAccountRepository(db_session).save_or_get_existing(
         UserAccount.register(LoginIdentity("kakao", "test-user"))
     )
-    WatchlistRepository(db_session).add(account.id, StockSymbol.of("005930.KS"))
+    from app.domain.catalog import CatalogStateRecord, SecurityRecord
+    now = datetime.now(timezone.utc)
+    for country in ("KR", "US"):
+        db_session.add(CatalogStateRecord(country=country, version=1, source="TEST", source_date=now.date(), fetched_at=now))
+    for symbol, country, name in (("005930.KS", "KR", "삼성전자"), ("MSFT", "US", "Microsoft"), ("AAPL", "US", "Apple")):
+        db_session.add(SecurityRecord(id="test-" + symbol, country=country, source="TEST", source_identity=symbol,
+            symbol=symbol, name=name, exchange="TEST", kind="common", status="active", listed_on=now.date(),
+            aliases=[], source_date=now.date(), version=1))
+    db_session.commit()
+    WatchlistRepository(db_session).add(account.id, StockSymbol.of("005930.KS"),
+        security_id="test-005930.KS", security_name="삼성전자")
     return account
 
 

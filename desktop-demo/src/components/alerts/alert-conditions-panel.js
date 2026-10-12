@@ -5,10 +5,10 @@ function AlertConditionsPanel() {
   return `
     <section id="alert-conditions-section" class="card alert-conditions-card">
       <div class="section-heading alert-heading">
-        <div><h2>사용자 알림 조건</h2><p>조건 저장만 제공하며 평가와 발송은 다음 설계까지 중단됩니다.</p></div>
+        <div><h2>사용자 알림 조건</h2><p>내 관심종목에서 대상을 고르고 알림 조건을 작성하세요.</p></div>
       </div>
       <form id="alert-condition-form" class="alert-condition-form">
-        <input id="alert-symbol-input" placeholder="종목 코드" aria-label="알림 조건 종목 코드">
+        <div id="watchlist-security-picker"></div>
         <textarea id="alert-rule-input" placeholder="예: 삼성전자 반도체 수요 관련 부정적 뉴스가 있으면 알려줘" aria-label="사용자 알림 조건"></textarea>
         <button class="primary-button" type="submit">검증 후 저장</button>
       </form>
