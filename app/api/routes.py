@@ -29,6 +29,8 @@ from app.domain.auth import UserAccount
 from app.domain.models import UserAccountRecord
 from app.application.notification_connections import NotificationConnectionError
 from app.domain.symbols import StockSymbol
+from app.application.stock_search import SecuritySelectionService
+from app.repositories.catalog import CatalogConflict, SecurityCatalogReader
 from app.application.custom_rule_agent import CustomRuleAgentError
 from app.integrations.kakao_auth import (
     KakaoAuthError,
@@ -256,8 +258,14 @@ def add_watchlist_item(
     payload: WatchlistCreate,
     account: UserAccount = Depends(get_current_account),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
+    db: Session = Depends(get_db),
 ):
-    return watchlist_repository.add(account.id, StockSymbol.of(payload.symbol))
+    try:
+        security = SecurityCatalogReader(db).require_active(payload.security_id, payload.symbol, lock=True)
+        return watchlist_repository.add(account.id, StockSymbol.of(security.symbol),
+                                        security_id=security.id, security_name=security.name)
+    except CatalogConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.get("/watchlist", response_model=list[WatchlistItemRead])
@@ -290,7 +298,17 @@ def create_alert_condition(
     account: UserAccount = Depends(get_current_account),
     alert_condition_repository: AlertConditionRepository = Depends(get_alert_condition_repository),
     validation_agent: RuleValidationAgent = Depends(get_rule_validation_agent),
+    db: Session = Depends(get_db),
 ):
+    try:
+        subscription = SecuritySelectionService(db).subscription(account.id, payload.subscription_id, payload.symbol)
+        selected_subscription_id = subscription.id
+        # End the read transaction before the potentially slow external validation.
+        db.rollback()
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except CatalogConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
     try:
         validation = validation_agent.validate(
             user_rule=payload.user_rule,
@@ -314,7 +332,10 @@ def create_alert_condition(
             symbol=payload.symbol,
             user_rule=payload.user_rule,
             validation=validation,
+            subscription_id=selected_subscription_id,
         )
+    except CatalogConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 

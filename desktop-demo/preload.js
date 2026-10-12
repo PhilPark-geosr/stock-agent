@@ -13,16 +13,25 @@ contextBridge.exposeInMainWorld("desktop", {
     chrome: process.versions.chrome
   },
   backend: {
+    searchSecurities: (options) => {
+      const query = new URLSearchParams(Object.entries(options).filter(([, value]) => value != null && value !== ""));
+      return request("GET", `/securities/search?${query}`);
+    },
     briefingSettings: (market) => request("GET", `/briefings/settings/${encodeURIComponent(market)}`),
     briefingOptions: (market) => request("GET", `/briefings/options/${encodeURIComponent(market)}`),
     saveBriefingSettings: (market, body) => request("PUT", `/briefings/settings/${encodeURIComponent(market)}`, body),
     generateBriefing: (body) => request("POST", "/briefings", body),
-    listBriefings: (offset = 0) => request("GET", `/briefings?offset=${Number(offset) || 0}&limit=30`),
+    listBriefings: (offset = 0, subject = "", dates = {}) => {
+      const query = new URLSearchParams({ offset: Number(offset) || 0, limit: 30, subject });
+      if (dates.from) query.set("date_from", dates.from);
+      if (dates.to) query.set("date_to", dates.to);
+      return request("GET", `/briefings?${query}`);
+    },
     briefingById: (id) => request("GET", `/briefings/${encodeURIComponent(id)}`),
     redeliverBriefing: (id, body) => request("POST", `/briefings/${encodeURIComponent(id)}/delivery`, body),
     status: () => ipcRenderer.invoke("backend:status"),
     listWatchlist: () => request("GET", "/watchlist"),
-    addWatchlist: (symbol) => request("POST", "/watchlist", { symbol }),
+    addWatchlist: (symbol, securityId) => request("POST", "/watchlist", { symbol, security_id: securityId }),
     deleteWatchlist: (symbol) => request("DELETE", `/watchlist/${encodeURIComponent(symbol)}`),
     latestAnalysis: (symbol) => request("GET", `/stocks/${encodeURIComponent(symbol)}/analysis/latest`),
     runAnalysis: (symbol) => request("POST", `/stocks/${encodeURIComponent(symbol)}/analysis`),
@@ -30,7 +39,7 @@ contextBridge.exposeInMainWorld("desktop", {
     analysisById: (symbol, resultId) => request("GET", `/stocks/${encodeURIComponent(symbol)}/analysis/${resultId}`),
     runScheduler: () => request("POST", "/scheduler/run?force=true"),
     listAlertConditions: () => request("GET", "/alert-conditions"),
-    addAlertCondition: (symbol, userRule) => request("POST", "/alert-conditions", { symbol, user_rule: userRule }),
+    addAlertCondition: (symbol, userRule, subscriptionId) => request("POST", "/alert-conditions", { symbol, user_rule: userRule, subscription_id: subscriptionId }),
     deleteAlertCondition: (conditionId) => request("DELETE", `/alert-conditions/${conditionId}`)
   },
   auth: {

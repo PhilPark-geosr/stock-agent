@@ -10,7 +10,7 @@ function WatchlistPanel() {
       </div>
       <div id="watchlist" class="watchlist"></div>
       <form id="add-symbol-form" class="add-symbol-form">
-        <input id="add-symbol-input" placeholder="예: 005930.KS" aria-label="관심종목 추가">
+        <div id="catalog-security-picker"></div>
         <button type="submit">관심종목 추가</button>
       </form>
     </aside>`;

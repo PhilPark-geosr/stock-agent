@@ -74,6 +74,7 @@ class BriefingContext(Contract):
     n: int
     sessions: list[date]
     symbols: list[str]
+    security_refs: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
 class Evidence(Contract):

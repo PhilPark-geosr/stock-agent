@@ -101,6 +101,7 @@ def _normalize_symbol(symbol: str) -> str:
 
 class WatchlistCreate(BaseModel):
     symbol: str = Field(..., min_length=1, max_length=24)
+    security_id: str | None = Field(default=None, max_length=36)
     name: Optional[str] = None
     market: Optional[str] = None
 
@@ -118,11 +119,14 @@ class WatchlistItemRead(BaseModel):
 
     id: int
     symbol: str
+    security_id: str | None = None
+    security_name: str | None = None
     created_at: datetime
 
 
 class CustomAlertConditionCreate(BaseModel):
     symbol: str = Field(..., min_length=1, max_length=24)
+    subscription_id: int | None = Field(default=None, ge=1)
     user_rule: str = Field(..., min_length=5, max_length=1000)
 
     @field_validator("symbol")

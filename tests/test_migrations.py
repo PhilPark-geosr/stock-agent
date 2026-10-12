@@ -37,7 +37,7 @@ def test_known_legacy_database_is_stamped_without_losing_rows(tmp_path: Path) ->
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT symbol FROM watchlist_items WHERE id=1")) == "AAPL"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0010_briefing_targets"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0011_security_catalog"
         columns = {column["name"] for column in inspect(engine).get_columns("watchlist_items")}
         assert {"user_account_id", "ended_at"} <= columns
         condition_columns = {
@@ -60,3 +60,28 @@ def test_unknown_existing_schema_is_not_auto_stamped(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="unknown database schema"):
         migrate_database(url)
+
+
+def test_catalog_migration_indexes_historical_targets_without_rewriting_snapshots(tmp_path):
+    from alembic import command
+    from app.core.migrations import _config
+    import sqlalchemy as sa
+    from datetime import datetime
+    url = _url(tmp_path / "subjects.db")
+    command.upgrade(_config(url), "0010_briefing_targets")
+    engine = create_engine(url)
+    metadata = sa.MetaData()
+    runs = sa.Table("briefing_runs", metadata, autoload_with=engine)
+    context = {"symbols": ["OLD", "NEW"], "n": 20}
+    original = {"summary": "NOT_A_TARGET is only mentioned"}
+    with engine.begin() as connection:
+        connection.execute(runs.insert().values(id="old-run", owner_id="owner", request_key="old", request_data={},
+            market="US", purpose="post_market", trade_date="2020-01-01", context=context, result=original,
+            prompt_id="old", status="completed", created_at=datetime(2020, 1, 1)))
+    migrate_database(url)
+    migrate_database(url)
+    with engine.connect() as connection:
+        rows = connection.execute(text("SELECT symbol,security_id FROM briefing_subjects")).all()
+        assert sorted(rows) == [("NEW", None), ("OLD", None)]
+        old = connection.execute(sa.select(runs)).first()
+        assert old.context == context and old.result == original
