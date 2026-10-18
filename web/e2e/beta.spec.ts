@@ -147,8 +147,22 @@ test('invited member redeems once and uses stored analysis without live services
   await memberPage.getByRole('link', { name: 'Approve Kakao' }).click()
   await expect(memberPage).toHaveURL(/\/app$/)
   await expect(memberPage.getByText('카카오 알림 연결됨')).toBeVisible()
+  let testSends = 0
+  await memberPage.route('**/notification-connections/kakao/test', async route => {
+    expect(route.request().method()).toBe('POST')
+    testSends += 1
+    await route.fulfill({ status: testSends === 1 ? 204 : 502, body: '' })
+  })
+  await memberPage.getByRole('button', { name: '테스트 알림 보내기', exact: true }).click()
+  await expect(memberPage.getByRole('status')).toContainText('발송을 접수했습니다')
+  expect(await memberPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await memberPage.screenshot({ path: testInfo.outputPath('mobile-test-notification.png'), fullPage: true })
+  await memberPage.getByRole('button', { name: '테스트 알림 보내기', exact: true }).click()
+  await expect(memberPage.getByRole('alert')).toContainText('수신함과 연결 상태')
+  expect(testSends).toBe(2)
   await memberPage.getByRole('button', { name: '연결 해제' }).click()
   await expect(memberPage.getByText('카카오 알림 연결 안 됨')).toBeVisible()
+  await expect(memberPage.getByRole('button', { name: '테스트 알림 보내기', exact: true })).toHaveCount(0)
 
   await memberPage.getByRole('button', { name: 'AAPL.KS 삭제' }).click()
   await expect(memberPage.locator('.watchlist')).toHaveCount(0)

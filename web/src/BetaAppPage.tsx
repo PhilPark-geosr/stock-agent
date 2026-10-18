@@ -4,6 +4,7 @@ import { WatchlistPanel } from './components/WatchlistPanel';
 import { AnalysisPanel, AnalysisHistoryPanel } from './components/AnalysisPanels';
 import { AlertConditionsPanel } from './components/AlertConditionsPanel';
 import { NotificationConnectionPanel } from './components/NotificationConnectionPanel';
+import { TestNotificationButton } from './components/TestNotificationButton';
 
 interface Props {
   api: WebApi;
@@ -190,6 +191,10 @@ export function BetaAppPage({ api, session, onLogout, onSessionExpired }: Props)
     <div id="analysis-area"><AnalysisPanel symbol={selectedSymbol} detail={detail} latestId={history[0]?.id ?? null} loading={historyLoading || detailLoading !== null} running={running} onRun={runAnalysis} /></div>
     <div id="history-area"><AnalysisHistoryPanel symbol={selectedSymbol} items={history} selectedId={detail?.id ?? null} loading={historyLoading} detailLoading={detailLoading} hasMore={hasMoreHistory} onSelect={showDetail} onLatest={() => { if (history[0]) showDetail(history[0]); }} onMore={loadMoreHistory} /></div>
     <div id="conditions-area"><AlertConditionsPanel key={conditionRevision} api={api} selectedSymbol={selectedSymbol} onSessionExpired={onSessionExpired} /></div>
-    <div id="notification-area"><NotificationConnectionPanel api={api} onSessionExpired={onSessionExpired} /></div>
+    <div id="notification-area">
+      <NotificationConnectionPanel api={api} onSessionExpired={onSessionExpired}>
+        <TestNotificationButton api={api} onSessionExpired={onSessionExpired} />
+      </NotificationConnectionPanel>
+    </div>
   </main>;
 }

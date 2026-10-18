@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ApiError, type NotificationConnection, type WebApi } from '../api';
 
 interface Props {
   api: WebApi;
   onSessionExpired: () => void;
   navigateTo?: (url: string) => void;
+  children?: ReactNode;
 }
 
-export function NotificationConnectionPanel({ api, onSessionExpired, navigateTo = url => window.location.assign(url) }: Props) {
+export function NotificationConnectionPanel({ api, onSessionExpired, navigateTo = url => window.location.assign(url), children }: Props) {
   const [connection, setConnection] = useState<NotificationConnection | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
@@ -67,6 +68,7 @@ export function NotificationConnectionPanel({ api, onSessionExpired, navigateTo 
     {message && <p className="notice error" role="alert">{message}</p>}
     <div className="connection-actions">
       {connection?.connected ? <button className="secondary-button" type="button" disabled={pending || loading} onClick={disconnect}>연결 해제</button> : <button className="primary-button" type="button" disabled={pending || loading} onClick={connect}>카카오 알림 연결</button>}
+      {connection?.connected && !pending && !loading && children}
       <button className="text-button" type="button" disabled={loading} onClick={refresh}>상태 다시 확인</button>
     </div>
   </section>;

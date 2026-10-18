@@ -12,6 +12,7 @@ from app.api.admin import router as admin_router
 from app.api.web_auth import router as web_auth_router
 from app.api.web_pages import register_web_pages
 from app.api.briefings import router as briefing_router
+from app.api.notification_test import router as notification_test_router
 from app.core.briefing_runtime import briefing_loop
 from app.core.database import SessionLocal, init_db
 from app.core.scheduler_config import scheduler_settings
@@ -61,6 +62,7 @@ def create_app(*, web_dist: Path | None = None) -> FastAPI:
     api = FastAPI(title="Stock Analysis API", version="0.1.0", lifespan=lifespan)
     api.include_router(router)
     api.include_router(web_auth_router)
+    api.include_router(notification_test_router)
     api.include_router(admin_router)
     register_web_pages(api, web_dist if web_dist is not None else Path(__file__).resolve().parents[1] / "web" / "dist")
     api.include_router(briefing_router)

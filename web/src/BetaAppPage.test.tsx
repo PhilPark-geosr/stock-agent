@@ -13,7 +13,7 @@ function apiWith(history: WebApi['analysisHistory']): WebApi {
     addWatchlist: vi.fn(), removeWatchlist: vi.fn(), analysisHistory: history, analysisDetail: vi.fn(),
     runAnalysis: vi.fn(), alertConditions: vi.fn().mockResolvedValue([]), addAlertCondition: vi.fn(),
     removeAlertCondition: vi.fn(), notificationConnection: vi.fn().mockResolvedValue({ connected: false, connection_id: null }),
-    authorizeNotification: vi.fn(), disconnectNotification: vi.fn(),
+    authorizeNotification: vi.fn(), disconnectNotification: vi.fn(), sendTestNotification: vi.fn(),
   };
 }
 
