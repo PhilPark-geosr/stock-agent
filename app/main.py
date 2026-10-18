@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,6 +11,8 @@ from app.api.routes import router
 from app.api.admin import router as admin_router
 from app.api.web_auth import router as web_auth_router
 from app.api.web_pages import register_web_pages
+from app.api.briefings import router as briefing_router
+from app.core.briefing_runtime import briefing_loop
 from app.core.database import SessionLocal, init_db
 from app.core.scheduler_config import scheduler_settings
 from app.core.scheduler_runtime import start_scheduler
@@ -31,7 +34,18 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if scheduler_settings()["enabled"]:
         scheduler_task, stop_event = start_scheduler(SessionLocal)
 
+    briefing_task = None
+    if os.getenv("BRIEFING_SCHEDULER_ENABLED", "true").lower() == "true":
+        briefing_task = asyncio.create_task(briefing_loop(SessionLocal))
+
     yield
+
+    if briefing_task is not None:
+        briefing_task.cancel()
+        try:
+            await briefing_task
+        except asyncio.CancelledError:
+            pass
 
     if stop_event is not None:
         stop_event.set()
@@ -49,6 +63,7 @@ def create_app(*, web_dist: Path | None = None) -> FastAPI:
     api.include_router(web_auth_router)
     api.include_router(admin_router)
     register_web_pages(api, web_dist if web_dist is not None else Path(__file__).resolve().parents[1] / "web" / "dist")
+    api.include_router(briefing_router)
     return api
 
 

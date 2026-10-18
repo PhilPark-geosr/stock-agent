@@ -62,7 +62,7 @@ function createWatchlistController({ backend, renderScreen, showToast, showView,
         showToast("추가할 종목 코드를 입력하세요.");
         return;
       }
-      const symbol = rawSymbol.includes(".") ? rawSymbol : `${rawSymbol}.KS`;
+      const symbol = /^\d{6}$/.test(rawSymbol) ? `${rawSymbol}.KS` : rawSymbol;
       try {
         await backend.addWatchlist(symbol);
         state.selectedSymbol = symbol;

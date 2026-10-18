@@ -13,6 +13,7 @@ function Sidebar() {
         <button class="flow-step" type="button" data-view="analysis-view">2. 최신 분석 확인</button>
         <button class="flow-step" type="button" data-view="history-view">3. 이력 비교</button>
         <button class="flow-step" type="button" data-view="alerts-view">4. 알림 상태 확인</button>
+        <button class="flow-step" type="button" data-view="briefing-view">5. 투자 브리핑</button>
       </nav>
       <div class="demo-notice">
         <div><span class="status-dot"></span><strong id="backend-connection">BACKEND 연결 중</strong></div>

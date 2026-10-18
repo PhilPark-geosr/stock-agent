@@ -16,7 +16,7 @@ def test_empty_database_is_upgraded_to_baseline(tmp_path: Path) -> None:
     migrate_database(url)
 
     tables = set(inspect(create_engine(url)).get_table_names())
-    assert {"alembic_version", "watchlist_items", "analysis_results", "custom_alert_conditions", "notification_connections", "notification_deliveries", "alert_evaluations"} <= tables
+    assert {"alembic_version", "watchlist_items", "analysis_results", "custom_alert_conditions", "notification_connections", "notification_deliveries", "alert_evaluations", "briefing_runs", "briefing_deliveries", "briefing_preferences", "briefing_prompt_versions", "briefing_prompt_activations"} <= tables
     delivery_columns = {
         column["name"] for column in inspect(create_engine(url)).get_columns("notification_deliveries")
     }
@@ -37,7 +37,7 @@ def test_known_legacy_database_is_stamped_without_losing_rows(tmp_path: Path) ->
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT symbol FROM watchlist_items WHERE id=1")) == "AAPL"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0010_beta_access_grants"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0011_merge_beta_briefing"
         columns = {column["name"] for column in inspect(engine).get_columns("watchlist_items")}
         assert {"user_account_id", "ended_at"} <= columns
         condition_columns = {
@@ -62,12 +62,17 @@ def test_unknown_existing_schema_is_not_auto_stamped(tmp_path: Path) -> None:
         migrate_database(url)
 
 
-def test_previous_head_preserves_all_existing_rows(tmp_path: Path) -> None:
+@pytest.mark.parametrize("previous_revision", [
+    "0008_user_alert_evaluation",
+    "0010_beta_access_grants",
+    "0010_briefing_targets",
+])
+def test_previous_head_preserves_all_existing_rows(tmp_path: Path, previous_revision: str) -> None:
     from alembic import command
     from app.core.migrations import _config
 
     url = _url(tmp_path / 'previous.db')
-    command.upgrade(_config(url), '0008_user_alert_evaluation')
+    command.upgrade(_config(url), previous_revision)
     engine = create_engine(url)
     with engine.begin() as connection:
         connection.execute(text("INSERT INTO user_accounts (id, login_provider, provider_subject_id, created_at) VALUES ('account', 'kakao', 'subject', '2026-09-21')"))
@@ -88,7 +93,11 @@ def test_previous_head_preserves_all_existing_rows(tmp_path: Path) -> None:
     with engine.connect() as connection:
         for name, rows in before.items():
             assert connection.execute(text(f'SELECT * FROM {name}')).all() == rows
-        assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '0010_beta_access_grants'
+        assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '0011_merge_beta_briefing'
     assert 'invitations' in inspect(engine).get_table_names()
     assert 'user_beta_access_grants' in inspect(engine).get_table_names()
+    assert 'briefing_runs' in inspect(engine).get_table_names()
+    assert 'symbols' in {
+        column['name'] for column in inspect(engine).get_columns('briefing_preferences')
+    }
     engine.dispose()

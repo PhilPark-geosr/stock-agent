@@ -3,7 +3,8 @@ const {
   AlertConditionsPanel, renderWatchlist, renderAnalysis, renderHistory, renderAlertConditions,
   showToast, showDialog, bindDialogEvents, state, emptyAnalysis, errorMessage,
   selectedStockView, createBackendService, createAnalysisController, createWatchlistController,
-  createAlertsController, createAuthController, createNotificationController, bindNavigationEvents, showView
+  createAlertsController, createAuthController, createNotificationController, bindNavigationEvents, showView,
+  BriefingPanel, createBriefingController
 } = window.StockAgent;
 
 const backend = createBackendService();
@@ -22,6 +23,7 @@ function buildApplicationShell() {
       <section id="analysis-view" class="app-view" hidden>${AnalysisOverview()}</section>
       <section id="history-view" class="app-view" hidden><div class="analysis-workspace">${AnalysisHistoryPanel()}</div></section>
       <section id="alerts-view" class="app-view" hidden><div class="analysis-workspace">${AlertConditionsPanel()}</div></section>
+      <section id="briefing-view" class="app-view" hidden>${BriefingPanel()}</section>
     </div>
   `);
 }
@@ -69,6 +71,8 @@ async function initializeApplication(account) {
   watchlistController.bindWatchlistEvents();
   analysisController.bindAnalysisEvents();
   alertsController.bindAlertsEvents();
+  const briefingController = createBriefingController({ backend });
+  await briefingController.load();
   const notificationController=createNotificationController({ notifications: window.desktop.notifications, showToast });
   notificationController.bind();
   document.querySelector("#logout-button").addEventListener("click", () => authController.logout().catch((error) => showToast(errorMessage(error))));
