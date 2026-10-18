@@ -25,6 +25,7 @@ class ExternalLoginCredential:
 class UserAccount:
     id: str
     login_identity: LoginIdentity
+    has_beta_access: bool = False
 
     @classmethod
     def register(cls, identity: LoginIdentity) -> "UserAccount":

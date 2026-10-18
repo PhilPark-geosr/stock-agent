@@ -138,10 +138,7 @@ def rule_validation_agent() -> FakeRuleValidationAgent:
 
 
 @pytest.fixture
-def current_account(db_session) -> UserAccount:
-    account = SqlAlchemyUserAccountRepository(db_session).save_or_get_existing(
-        UserAccount.register(LoginIdentity("kakao", "test-user"))
-    )
+def catalog_data(db_session):
     from app.domain.catalog import CatalogStateRecord, SecurityRecord
     now = datetime.now(timezone.utc)
     for country in ("KR", "US"):
@@ -151,9 +148,16 @@ def current_account(db_session) -> UserAccount:
             symbol=symbol, name=name, exchange="TEST", kind="common", status="active", listed_on=now.date(),
             aliases=[], source_date=now.date(), version=1))
     db_session.commit()
+
+
+@pytest.fixture
+def current_account(db_session, catalog_data) -> UserAccount:
+    account = SqlAlchemyUserAccountRepository(db_session).save_or_get_existing(
+        UserAccount.register(LoginIdentity("kakao", "test-user"))
+    )
     WatchlistRepository(db_session).add(account.id, StockSymbol.of("005930.KS"),
         security_id="test-005930.KS", security_name="삼성전자")
-    return account
+    return UserAccount(account.id, account.login_identity, has_beta_access=True)
 
 
 @pytest.fixture
@@ -181,10 +185,10 @@ def client(
     app.dependency_overrides[get_market_data_provider] = lambda: market_data
     app.dependency_overrides[get_analysis_agent] = lambda: agent
     from app.api.routes import get_rule_validation_agent
-    from app.api.deps import get_current_account
+    from app.api.deps import get_current_account as get_current_account_dependency
 
     app.dependency_overrides[get_rule_validation_agent] = lambda: rule_validation_agent
-    app.dependency_overrides[get_current_account] = lambda: current_account
+    app.dependency_overrides[get_current_account_dependency] = lambda: current_account
     app.dependency_overrides[get_analysis_service] = override_analysis_service
     test_client = TestClient(app)
     try:

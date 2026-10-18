@@ -37,7 +37,7 @@ def test_known_legacy_database_is_stamped_without_losing_rows(tmp_path: Path) ->
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT symbol FROM watchlist_items WHERE id=1")) == "AAPL"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0011_security_catalog"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0012_merge_catalog_beta"
         columns = {column["name"] for column in inspect(engine).get_columns("watchlist_items")}
         assert {"user_account_id", "ended_at"} <= columns
         condition_columns = {
@@ -85,3 +85,46 @@ def test_catalog_migration_indexes_historical_targets_without_rewriting_snapshot
         assert sorted(rows) == [("NEW", None), ("OLD", None)]
         old = connection.execute(sa.select(runs)).first()
         assert old.context == context and old.result == original
+
+
+@pytest.mark.parametrize("previous_revision", [
+    "0008_user_alert_evaluation",
+    "0010_beta_access_grants",
+    "0010_briefing_targets",
+    "0011_merge_beta_briefing",
+    "0011_security_catalog",
+])
+def test_previous_head_preserves_all_existing_rows(tmp_path: Path, previous_revision: str) -> None:
+    from alembic import command
+    from app.core.migrations import _config
+
+    url = _url(tmp_path / 'previous.db')
+    command.upgrade(_config(url), previous_revision)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO user_accounts (id, login_provider, provider_subject_id, created_at) VALUES ('account', 'kakao', 'subject', '2026-09-21')"))
+    from sqlalchemy.orm import Session
+    from app.domain.models import AnalysisResult, NotificationConnectionRecord, NotificationDeliveryRecord
+
+    with Session(engine) as db:
+        db.add(AnalysisResult(id=1, symbol='AAPL', overall_judgment='neutral', summary='Preserve this analysis'))
+        db.add(NotificationConnectionRecord(id='connection', owner_id='account', channel='kakao'))
+        db.flush()
+        db.add(NotificationDeliveryRecord(recipient_id='account', analysis_id=1,
+                                         connection_id='connection', kind='default_alert',
+                                         message='Preserve this notification', status='sent'))
+        db.commit()
+    with engine.connect() as connection:
+        before = {name: connection.execute(text(f'SELECT * FROM {name}')).all() for name in inspect(engine).get_table_names() if name != 'alembic_version'}
+    migrate_database(url)
+    with engine.connect() as connection:
+        for name, rows in before.items():
+            assert connection.execute(text(f'SELECT * FROM {name}')).all() == rows
+        assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '0012_merge_catalog_beta'
+    assert 'invitations' in inspect(engine).get_table_names()
+    assert 'user_beta_access_grants' in inspect(engine).get_table_names()
+    assert 'briefing_runs' in inspect(engine).get_table_names()
+    assert 'symbols' in {
+        column['name'] for column in inspect(engine).get_columns('briefing_preferences')
+    }
+    engine.dispose()

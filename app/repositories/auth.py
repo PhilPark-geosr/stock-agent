@@ -3,7 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.domain.auth import AuthSession, LoginAttempt, LoginIdentity, UserAccount
-from app.domain.models import AuthSessionRecord, LoginAttemptRecord, UserAccountRecord
+from app.domain.models import AuthSessionRecord, BetaAccessGrantRecord, LoginAttemptRecord, UserAccountRecord
 from app.interfaces.auth import AuthSessionRepository, LoginAttemptRepository, UserAccountRepository
 
 
@@ -40,17 +40,17 @@ class SqlAlchemyUserAccountRepository(UserAccountRepository):
             raise
         return account
 
-    @staticmethod
-    def _to_domain(record: UserAccountRecord) -> UserAccount:
+    def _to_domain(self, record: UserAccountRecord) -> UserAccount:
         return UserAccount(
             id=record.id,
             login_identity=LoginIdentity(record.login_provider, record.provider_subject_id),
+            has_beta_access=self.db.get(BetaAccessGrantRecord, record.id) is not None,
         )
 
 
 def _account(db: Session, account_id: str | None) -> UserAccount | None:
     record = db.get(UserAccountRecord, account_id) if account_id else None
-    return SqlAlchemyUserAccountRepository._to_domain(record) if record else None
+    return SqlAlchemyUserAccountRepository(db)._to_domain(record) if record else None
 
 
 class SqlAlchemyLoginAttemptRepository(LoginAttemptRepository):
