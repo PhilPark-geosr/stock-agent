@@ -28,6 +28,28 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 브라우저에서 `http://127.0.0.1:8000/login`에 접속합니다. 카카오 콘솔에도 위 콜백 주소를 등록해야 합니다. 기존 `/` 화면과 API는 그대로 유지합니다. 웹을 빌드하지 않았다면 `/login`은 503을 반환합니다.
 
+### Tailscale Serve로 모바일 웹 로그인 시험
+
+PC와 Android 폰을 같은 Tailscale 네트워크에 연결하고, PC 서버를 `tailscale serve http://127.0.0.1:8000`으로 연결합니다. Serve의 HTTPS 인증서를 활성화하며, 이 시험에는 Funnel이 필요하지 않습니다. 아래의 `pc-name.tailXXXXXX.ts.net`은 실제 Serve 도메인으로 바꿉니다.
+
+프로젝트 `.env`의 로그인 설정을 모바일에서 접속할 HTTPS 주소에 맞춥니다.
+
+```env
+WEB_ORIGIN=https://pc-name.tailXXXXXX.ts.net
+KAKAO_REDIRECT_URI=https://pc-name.tailXXXXXX.ts.net/auth/kakao/callback
+WEB_COOKIE_SECURE=true
+```
+
+1. `WEB_ORIGIN`에는 `/login` 같은 경로 없이 HTTPS 출처만 지정합니다. 현재 서버는 하나의 웹 출처를 허용하므로, 이 설정에서는 PC에서도 같은 Serve 주소로 웹을 이용합니다.
+2. 카카오 Developers의 REST API 키 설정에 위 `KAKAO_REDIRECT_URI`와 정확히 같은 로그인 Redirect URI를 추가합니다.
+3. Python 서버를 재시작하고 폰에서 `https://pc-name.tailXXXXXX.ts.net/login`에 접속해 로그인합니다. `.env` 변경만으로 Tailscale Serve를 재시작할 필요는 없습니다.
+
+로그인 중 `403`이 발생하면 응답의 `detail`을 확인합니다. `Untrusted web origin`이면 브라우저 접속 출처와 `WEB_ORIGIN`이 다른 것입니다. Origin 검사를 해제하지 말고 실제 접속 주소와 설정을 맞춥니다. 카카오 화면에 `KOE006`이 표시되면 [공식 에러 안내](https://developers.kakao.com/docs/ko/kakaologin/trouble-shooting)에 따라 등록된 Redirect URI와 요청 주소를 확인합니다.
+
+모바일에서 콜백을 `127.0.0.1`로 두면 PC가 아니라 폰 자신으로 돌아가므로 Serve 주소가 필요합니다. 카카오 알림 연결까지 시험할 때는 `KAKAO_NOTIFICATION_REDIRECT_URI`도 `https://pc-name.tailXXXXXX.ts.net/notification-connections/kakao/callback`으로 설정하고 카카오 콘솔에 별도로 등록합니다.
+
+검증은 모바일 데이터에서 `/health` 도달 확인 → 서비스 로그인 완료 → 저장된 분석 결과 조회 순서로 진행합니다. `/health` 성공만으로 로그인이나 오프라인 보관이 검증되지는 않습니다. 개인 PC·모바일 이용의 합의 사항과 미결정 사항은 [요구사항 문서](design/personal_pc_mobile_requirements.md)를 참고하세요.
+
 ### 첫 운영자 지정과 발급
 
 1. `/login`에서 카카오 로그인합니다. 팝업이 차단되면 허용한 뒤 다시 시도합니다.
