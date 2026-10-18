@@ -30,7 +30,31 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 ### Tailscale Serve로 모바일 웹 로그인 시험
 
-PC와 Android 폰을 같은 Tailscale 네트워크에 연결하고, PC 서버를 `tailscale serve http://127.0.0.1:8000`으로 연결합니다. Serve의 HTTPS 인증서를 활성화하며, 이 시험에는 Funnel이 필요하지 않습니다. 아래의 `pc-name.tailXXXXXX.ts.net`은 실제 Serve 도메인으로 바꿉니다.
+#### PC·Android 연결과 HTTPS 설정
+
+1. [Tailscale 다운로드](https://tailscale.com/download)에서 Windows용 앱을 설치하고 로그인합니다. Android 폰에도 Tailscale 앱을 설치하고 같은 계정으로 로그인합니다.
+2. 두 기기에서 Tailscale 연결을 켭니다. Android에서는 VPN 연결 요청을 허용합니다. [관리 콘솔의 기기 목록](https://login.tailscale.com/admin/machines)에서 PC와 폰이 같은 개인 네트워크(tailnet)에 연결되었는지 확인합니다.
+3. [관리 콘솔의 DNS 설정](https://login.tailscale.com/admin/dns)에서 **MagicDNS**를 켜고, **HTTPS Certificates → Enable HTTPS**를 활성화합니다. 인증서 발급 시 기기 도메인이 공개 인증서 기록에 남는다는 안내를 확인합니다. 이 시험에는 일반 인터넷 공개 기능인 Funnel을 사용하지 않습니다.
+4. 앞의 웹 빌드·실행 절차대로 PC의 Python 서버를 실행합니다. PC 브라우저에서 `http://127.0.0.1:8000/health`를 열어 `{"status":"ok"}`를 확인합니다. 서버는 `127.0.0.1:8000`으로 실행한 상태를 유지합니다.
+5. 별도 PowerShell에서 다음을 실행합니다. HTTPS 활성화 안내 URL이 나오면 해당 링크에서 설정을 완료한 뒤 다시 실행합니다.
+
+   ```powershell
+   tailscale status
+   tailscale serve --bg http://127.0.0.1:8000
+   tailscale serve status
+   ```
+
+   `tailscale` 명령을 찾지 못하면 설치 후 PowerShell을 다시 열거나 기본 설치 경로의 실행 파일을 사용합니다. 예: `& 'C:\Program Files\Tailscale\tailscale.exe' serve --bg http://127.0.0.1:8000`.
+
+6. Serve가 출력한 `https://기기이름.tailXXXXXX.ts.net` 주소를 확인합니다. 아래의 `pc-name.tailXXXXXX.ts.net`은 이 실제 도메인으로 바꿉니다. 폰에서 Wi-Fi를 끄고 모바일 데이터를 켠 뒤, Tailscale 연결을 유지한 상태로 해당 주소의 `/health`를 열어 같은 응답을 확인합니다.
+
+`--bg`는 Serve를 백그라운드에서 유지하지만 Python 서버를 대신 실행하지는 않습니다. PC가 켜져 있고 Python 서버와 양쪽 Tailscale 연결이 유지되어야 새 요청을 처리할 수 있습니다. 이 안내의 기본 HTTPS Serve만 중지하려면 `tailscale serve --https=443 off`를 실행합니다.
+
+접속되지 않으면 PC 로컬 `/health` → 두 기기의 Tailscale 연결 → `tailscale serve status`의 대상 주소 → MagicDNS·HTTPS 설정 순서로 확인합니다. tailnet 접근 정책을 별도로 제한했다면 폰에서 PC의 HTTPS 포트(443) 접근을 허용하는지도 확인합니다.
+
+설정 근거: [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve), [Serve 명령](https://tailscale.com/docs/reference/tailscale-cli/serve), [HTTPS 활성화](https://tailscale.com/docs/how-to/set-up-https-certificates).
+
+#### 카카오 로그인 설정과 확인
 
 프로젝트 `.env`의 로그인 설정을 모바일에서 접속할 HTTPS 주소에 맞춥니다.
 
