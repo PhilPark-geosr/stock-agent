@@ -141,7 +141,7 @@ def test_scheduler_without_notification_connection_keeps_analysis_successful(db_
     assert alert_notifier.messages == []
 
 
-def test_scheduler_run_endpoint(client, db_session, market_data, agent, alert_notifier):
+def test_scheduler_run_endpoint(client, db_session, market_data, agent, alert_notifier, current_account, monkeypatch):
     from unittest.mock import patch
 
     subscribe(db_session)
@@ -156,10 +156,13 @@ def test_scheduler_run_endpoint(client, db_session, market_data, agent, alert_no
     from app.api.deps import get_analysis_service
 
     client.app.dependency_overrides[get_analysis_service] = lambda: service
+    # Service composition loads the local environment, so set the test operator
+    # after composition and immediately before the request.
+    monkeypatch.setenv("ADMIN_ACCOUNT_ID", current_account.id)
     with patch("app.api.routes.run_scheduled_batch", wraps=run_scheduled_batch):
         response = client.post("/scheduler/run?force=true")
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     body = response.json()
     assert body["ran"] is True
     assert body["symbols_analyzed"] == ["005930.KS"]

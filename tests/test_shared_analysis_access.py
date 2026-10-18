@@ -13,6 +13,7 @@ def test_active_subscription_is_required_to_read_or_run_analysis(
     stranger = SqlAlchemyUserAccountRepository(db_session).save_or_get_existing(
         UserAccount.register(LoginIdentity("kakao", "stranger"))
     )
+    stranger = UserAccount(stranger.id, stranger.login_identity, has_beta_access=True)
     client.app.dependency_overrides[get_current_account] = lambda: stranger
 
     assert client.get("/stocks/005930.KS/analysis/latest").status_code == 404
