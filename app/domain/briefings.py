@@ -55,6 +55,7 @@ class BriefingRequest(TargetSelection):
     purpose: Purpose
     n: int | None = Field(default=None, ge=1, le=250, strict=True)
     original_id: str | None = None
+    retry_failed: bool = False
 
 
 class BriefingSettings(TargetSelection):
@@ -136,3 +137,15 @@ def market_for_symbol(symbol: str) -> Market | None:
     if re.fullmatch(r"[A-Z]{1,6}(?:-[A-Z])?", symbol):
         return "US"
     return None
+
+
+def retryable_symbols(*, status, symbols, snapshot, result):
+    """Unavailable decisions can be retried; a valid hold verdict is a success."""
+    if status not in ("partial", "deferred", "failed"):
+        return []
+    eligible = set((snapshot or {}).get("eligible_symbols", []))
+    successful = set() if status == "failed" else {
+        item["symbol"] for item in (result or {}).get("items", [])
+        if item["symbol"] in eligible and item.get("evidence_ids")
+    }
+    return sorted(set(symbols) - successful)

@@ -35,3 +35,20 @@ test("briefing setup exposes independent schedules and required trading-day coun
   assert.match(output, /name="n"[^>]*required/);
   assert.match(output, /data-more-briefings/);
 });
+
+
+test("comparison provenance, original and failed-only retry are visible and escaped", () => {
+  const run = {trade_date: "2026-09-21", purpose: "post_market", status: "partial",
+    context: {n: 2, cutoff_at: "now"}, retryable_symbols: ["<failed>"],
+    previous: {trade_date: "2026-09-21", purpose: "pre_market", n: 2, cutoff_at: "<cutoff>", verdicts: {AAPL: "매도"}},
+    original: {trade_date: "<date>", purpose: "post_market"},
+    result: {summary: "결과", items: [{symbol: "AAPL", verdict: "매수", reason: "근거", comparison: "변경",
+      comparison_reason: "변화", evidence_ids: [], limitations: [], next_observation: "관찰"}]}};
+  const output = renderBriefing(run);
+  for (const marker of ["data-previous-briefing", "data-original-briefing", "data-retry-failed", "판단 변경 종목 우선", "이전 판단 매도 → 현재 판단 매수"])
+    assert.ok(output.includes(marker));
+  assert.match(output, /&lt;cutoff&gt;/);
+  assert.match(output, /&lt;failed&gt;/);
+  assert.match(output, /&lt;date&gt;/);
+  assert.doesNotMatch(renderBriefing({...run, retryable_symbols: []}), /data-retry-failed/);
+});
