@@ -9,6 +9,12 @@ function createBriefingController({ backend }) {
   let generationRequest = null, currentRun = null, originalId = null;
   let options = null, saved = null, loadedMarket = null, loadVersion = 0, detailVersion = 0;
   let selected = new Set();
+  let historySubject = "", historyVersion = 0;
+  let historyDates = {};
+  const historyPickerRoot = el("[data-briefing-security-picker]");
+  if (historyPickerRoot) window.StockAgent.createSecurityPicker({ root: historyPickerRoot, backend, scope: "briefings", onSelect: (row) => {
+    historySubject = row?.key || ""; ++historyVersion; refresh().catch(message);
+  } });
   const retryRequests = new Map();
   const failedRetryRequests = new Map();
   const uuid = () => crypto.randomUUID();
@@ -76,10 +82,12 @@ function createBriefingController({ backend }) {
     finally { if (version === loadVersion) { loading = false; update(); } }
   }
   async function refresh(append = false) {
-    if (loadingHistory) return;
+    if (append && loadingHistory) return;
+    const version = ++historyVersion, subject = historySubject;
     loadingHistory = true;
     try {
-      const runs = await backend.listBriefings(append ? offset : 0);
+      const runs = await backend.listBriefings(append ? offset : 0, subject, historyDates);
+      if (version !== historyVersion) return;
       if (!append) { history.replaceChildren(); offset = 0; }
       runs.forEach((run) => {
         const button = document.createElement("button");
@@ -89,8 +97,8 @@ function createBriefingController({ backend }) {
         button.addEventListener("click", () => select(run.id).catch(message)); history.append(button);
       });
       offset += runs.length; more.hidden = runs.length < 30;
-      if (!offset) history.textContent = "아직 브리핑이 없습니다. 위에서 종목을 선택해 첫 브리핑을 만들어보세요.";
-    } finally { loadingHistory = false; }
+      if (!offset) history.textContent = subject ? "선택한 종목의 저장된 브리핑이 없습니다." : "아직 저장된 브리핑이 없습니다.";
+    } finally { if (version === historyVersion) loadingHistory = false; }
   }
   async function select(id) {
     const version = ++detailVersion, run = await backend.briefingById(id);
@@ -186,6 +194,10 @@ function createBriefingController({ backend }) {
     try { await Promise.all([loadMarket(true), refresh()]); if (currentRun) await select(currentRun.id); } catch (error) { message(error); }
   });
   more.addEventListener("click", () => refresh(true).catch(message));
+  el("[data-history-dates]")?.addEventListener("click", () => {
+    historyDates = { from: el("[data-history-from]").value, to: el("[data-history-to]").value };
+    refresh().catch(message);
+  });
   const onView = (event) => {
     if (!root.isConnected) { document.removeEventListener("stock-agent:view", onView); return; }
     if (event.detail === "briefing-view") loadMarket(true);

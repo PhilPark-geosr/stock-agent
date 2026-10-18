@@ -44,6 +44,8 @@ function BriefingPanel() {
     </form>
     <p data-briefing-status role="status" aria-live="polite" class="briefing-feedback"></p>
     <section class="briefing-history-section"><h3>지난 브리핑 이어보기</h3><p class="briefing-muted">생성 당시 선택한 종목과 근거를 다시 확인할 수 있습니다.</p>
+      <div data-briefing-security-picker></div>
+      <div class="security-picker-options"><label>거래일 시작 <input type="date" data-history-from></label><label>거래일 종료 <input type="date" data-history-to></label><button type="button" data-history-dates>기간 적용</button></div>
       <div class="briefing-layout"><div><div data-briefing-history></div><button type="button" data-more-briefings hidden>이전 브리핑 더 보기</button></div>
       <article data-briefing-detail class="briefing-card"><div class="briefing-empty"><h3>판단의 흐름을 한곳에서</h3><p>브리핑을 만들거나 왼쪽 이력을 선택하면<br>종목별 결론과 이전 판단의 변화를 확인할 수 있습니다.</p></div></article></div></section>
   </div>`;

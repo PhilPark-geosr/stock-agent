@@ -8,7 +8,7 @@ import { WatchlistPanel } from './components/WatchlistPanel';
 afterEach(() => window.history.replaceState({}, '', '/'));
 
 describe('reusable beta panels', () => {
-  it('searches only the watchlist and adds an unsuffixed code as .KS', async () => {
+  it('searches the watchlist, completes Korean numeric codes and preserves US tickers', async () => {
     const onAdd = vi.fn().mockResolvedValue(true);
     render(<WatchlistPanel items={[{ id: 1, symbol: '005930.KS', created_at: '' }, { id: 2, symbol: 'AAPL', created_at: '' }]}
       selectedSymbol={null} loading={false} adding={false} removing={null} onAdd={onAdd} onSelect={vi.fn()} onRemove={vi.fn()} />);
@@ -18,6 +18,10 @@ describe('reusable beta panels', () => {
     fireEvent.change(screen.getByLabelText('관심 종목 코드'), { target: { value: '000660' } });
     fireEvent.click(screen.getByRole('button', { name: '종목 추가' }));
     await waitFor(() => expect(onAdd).toHaveBeenCalledWith('000660.KS'));
+    await waitFor(() => expect(screen.getByLabelText('관심 종목 코드')).toHaveValue(''));
+    fireEvent.change(screen.getByLabelText('관심 종목 코드'), { target: { value: ' aapl ' } });
+    fireEvent.click(screen.getByRole('button', { name: '종목 추가' }));
+    await waitFor(() => expect(onAdd).toHaveBeenLastCalledWith('AAPL'));
   });
 
   it('shows validation guidance and manages only the signed-in account conditions', async () => {

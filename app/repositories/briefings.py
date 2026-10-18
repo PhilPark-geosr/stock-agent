@@ -114,6 +114,8 @@ class BriefingHistory:
         self.claim_update(row.id, token, status=status, result=result, failure_reason=failure_reason,
             completed_at=self.clock(), claim_token=None, lease_until=None)
         if status in ("completed", "partial"):
+            from app.application.stock_search import index_briefing_subjects
+            index_briefing_subjects(self.db, row)
             enabled = self.settings(row.owner_id, row.market).kakao_enabled
             self.db.add(BriefingDeliveryRecord(id=str(uuid4()), run_id=row.id, owner_id=row.owner_id,
                 channel="kakao", message=message or "브리핑이 준비됐습니다.",

@@ -24,6 +24,8 @@ if database_path.parent.parent != temporary_root or not database_path.parent.nam
 os.environ.update(
     DATABASE_URL=f"sqlite:///{database_path.as_posix()}",
     SCHEDULER_ENABLED="false",
+    BRIEFING_SCHEDULER_ENABLED="false",
+    CATALOG_SCHEDULER_ENABLED="false",
     ADMIN_ACCOUNT_ID="browser-test-operator",
     WEB_ORIGIN="http://127.0.0.1:8765",
     WEB_COOKIE_SECURE="false",
@@ -109,6 +111,13 @@ def fake_authorization_url(request: Request):
 if __name__ == "__main__":
     init_db()
     with SessionLocal() as db:
+        from app.domain.catalog import CatalogStateRecord, SecurityRecord
+        now = datetime.now(timezone.utc)
+        db.add(CatalogStateRecord(country="US", version=1, source="TEST", source_date=now.date(), fetched_at=now))
+        db.add(SecurityRecord(id="test-AAPL", country="US", source="TEST", source_identity="AAPL",
+            symbol="AAPL", name="Apple", exchange="NASDAQ", kind="common", status="active",
+            listed_on=now.date(), aliases=[], source_date=now.date(), version=1))
+        db.commit()
         accounts = SqlAlchemyUserAccountRepository(db)
         for _code, subject, account_id in TEST_IDENTITIES.values():
             accounts.save_or_get_existing(
@@ -116,7 +125,7 @@ if __name__ == "__main__":
             )
         db.add_all([
             AnalysisResult(
-                symbol="AAPL.KS",
+                symbol="AAPL",
                 analyzed_at=datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc),
                 data_timestamp=datetime(2026, 9, 27, 11, 55, tzinfo=timezone.utc),
                 overall_judgment="관망",
@@ -131,7 +140,7 @@ if __name__ == "__main__":
                 shared_safe=True,
             ),
             AnalysisResult(
-                symbol="AAPL.KS",
+                symbol="AAPL",
                 analyzed_at=datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc),
                 data_timestamp=datetime(2026, 9, 26, 11, 55, tzinfo=timezone.utc),
                 overall_judgment="매수 관심",

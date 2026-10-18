@@ -95,8 +95,8 @@ test('invited member redeems once and uses stored analysis without live services
 
   await memberPage.getByLabel('관심 종목 코드').fill('aapl')
   await memberPage.getByRole('button', { name: '종목 추가' }).click()
-  await expect(memberPage.locator('.watchlist')).toContainText('AAPL.KS')
-  const history = memberPage.getByRole('list', { name: 'AAPL.KS 저장된 분석 이력' })
+  await expect(memberPage.locator('.watchlist')).toContainText('AAPL')
+  const history = memberPage.getByRole('list', { name: 'AAPL 저장된 분석 이력' })
   await expect(history).toContainText('브라우저 테스트용 최근 공용 분석입니다.')
   await expect(history).toContainText('브라우저 테스트용 이전 공용 분석입니다.')
   await expect(memberPage.locator('.analysis-detail')).toContainText('브라우저 테스트용 최근 공용 분석입니다.')
@@ -139,7 +139,7 @@ test('invited member redeems once and uses stored analysis without live services
   await memberPage.getByLabel('알림 조건', { exact: true }).fill('주가가 5% 이상 오르면 알려줘')
   await memberPage.getByRole('button', { name: '조건 등록' }).click()
   await expect(memberPage.getByRole('list', { name: '내 알림 조건 목록' })).toContainText('상승 조건')
-  await memberPage.getByRole('button', { name: 'AAPL.KS 조건 9 삭제' }).click()
+  await memberPage.getByRole('button', { name: 'AAPL 조건 9 삭제' }).click()
   await expect(memberPage.getByText('등록된 알림 조건이 없습니다.')).toBeVisible()
   await memberPage.getByRole('button', { name: '카카오 알림 연결', exact: true }).click()
   await expect(memberPage).toHaveURL(/\/fake-kakao-consent$/)
@@ -150,7 +150,7 @@ test('invited member redeems once and uses stored analysis without live services
   await memberPage.getByRole('button', { name: '연결 해제' }).click()
   await expect(memberPage.getByText('카카오 알림 연결 안 됨')).toBeVisible()
 
-  await memberPage.getByRole('button', { name: 'AAPL.KS 삭제' }).click()
+  await memberPage.getByRole('button', { name: 'AAPL 삭제' }).click()
   await expect(memberPage.locator('.watchlist')).toHaveCount(0)
   await memberPage.reload()
   await expect(memberPage).toHaveURL(/\/app$/)

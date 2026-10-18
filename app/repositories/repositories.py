@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -39,19 +39,23 @@ class WatchlistRepository(WatchlistRepositoryInterface):
             )
         )
 
-    def add(self, owner_id: str, symbol: StockSymbol) -> WatchlistSubscription:
+    def add(self, owner_id: str, symbol: StockSymbol, *, security_id=None, security_name=None) -> WatchlistSubscription:
         existing = self.get(owner_id, symbol)
         if existing is not None:
+            if security_id and existing.security_id != security_id:
+                from app.repositories.catalog import CatalogConflict
+                raise CatalogConflict("같은 코드의 기존 등록이 있습니다. 기존 관심종목 삭제 후 다시 선택하세요.")
             return existing
 
-        item = WatchlistSubscription(owner_id=owner_id, symbol=symbol.value)
+        item = WatchlistSubscription(owner_id=owner_id, symbol=symbol.value,
+                                    security_id=security_id, security_name=security_name)
         self.db.add(item)
         try:
             self.db.commit()
         except IntegrityError:
             self.db.rollback()
             existing = self.get(owner_id, symbol)
-            if existing is not None:
+            if existing is not None and (security_id is None or existing.security_id == security_id):
                 return existing
             raise
         self.db.refresh(item)
@@ -131,6 +135,7 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
         symbol: str,
         user_rule: str,
         validation: RuleValidationResult,
+        subscription_id: int | None = None,
     ) -> CustomAlertConditionRecord:
         if not validation.is_valid or not validation.normalized_name or not validation.normalized_rule:
             raise ValueError("only valid alert conditions can be saved")
@@ -145,6 +150,18 @@ class AlertConditionRepository(AlertConditionRepositoryInterface):
         )
         if subscription is None:
             raise LookupError("active watchlist subscription not found")
+        if subscription_id is not None:
+            from app.application.stock_search import SecuritySelectionService
+            subscription = SecuritySelectionService(self.db).subscription(owner_id, subscription_id, normalized, lock=True)
+            # Lock the exact subscription through the final insert. Delete/re-add cannot
+            # silently transfer a condition to a new subscription after model validation.
+            count = self.db.execute(update(WatchlistSubscription).where(
+                WatchlistSubscription.id == subscription_id, WatchlistSubscription.owner_id == owner_id,
+                WatchlistSubscription.ended_at.is_(None),
+            ).values(security_name=subscription.security_name)).rowcount
+            if count != 1:
+                self.db.rollback()
+                raise LookupError("selected subscription changed")
         record = CustomAlertConditionRecord(
             subscription_id=subscription.id,
             symbol=normalized,
