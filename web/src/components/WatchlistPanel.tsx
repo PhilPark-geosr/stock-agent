@@ -22,7 +22,7 @@ export function WatchlistPanel({ items, selectedSymbol, loading, adding, removin
     event.preventDefault();
     const raw = symbol.trim().toUpperCase();
     if (!raw) return;
-    if (await onAdd(raw.includes('.') ? raw : `${raw}.KS`)) setSymbol('');
+    if (await onAdd(/^\d{6}$/.test(raw) ? `${raw}.KS` : raw)) setSymbol('');
   }
 
   return <section className="watchlist-panel" aria-labelledby="watchlist-title">

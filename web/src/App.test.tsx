@@ -78,7 +78,7 @@ describe('beta web routes', () => {
     expect(screen.queryByText('hidden')).not.toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText('예: 005930.KS'), { target: { value: 'AAPL' } });
     fireEvent.click(screen.getByRole('button', { name: '종목 추가' }));
-    await waitFor(() => expect(api.addWatchlist).toHaveBeenCalledWith('AAPL.KS'));
+    await waitFor(() => expect(api.addWatchlist).toHaveBeenCalledWith('AAPL'));
     fireEvent.click(screen.getByRole('button', { name: 'MSFT 삭제' }));
     await waitFor(() => expect(api.removeWatchlist).toHaveBeenCalledWith('MSFT'));
   });

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 from app.domain import briefing_records  # noqa: F401 — register briefing metadata
+from app.domain import catalog  # noqa: F401 — register catalog metadata
 
 
 def utc_now() -> datetime:
@@ -31,6 +32,8 @@ class WatchlistSubscription(Base):
         "user_account_id", ForeignKey("user_accounts.id"), nullable=True, index=True
     )
     symbol: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    security_id: Mapped[str | None] = mapped_column(ForeignKey("securities.id"), nullable=True)
+    security_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

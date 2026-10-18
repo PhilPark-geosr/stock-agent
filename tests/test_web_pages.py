@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.web_auth import COOKIE_NAME
+from app.api.deps import get_login_service
 from app.application.auth_sessions import SessionService
 from app.core.database import get_db
 from app.domain.auth import LoginIdentity, UserAccount
@@ -20,6 +21,7 @@ def pages(tmp_path, db_session, monkeypatch):
     (tmp_path / 'assets' / 'main.js').write_text('window.webLoaded=true;', encoding='utf-8')
     app = create_app(web_dist=tmp_path)
     app.dependency_overrides[get_db] = lambda: db_session
+    app.dependency_overrides[get_login_service] = lambda: None
     client = TestClient(app)
     yield client
     client.close()
