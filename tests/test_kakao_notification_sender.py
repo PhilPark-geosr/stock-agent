@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta, timezone
+import json
+from urllib.parse import parse_qs
 import httpx
+import pytest
 from app.domain.notifications import NotificationConnection, NotificationCredentials
 from app.integrations.kakao_notify import KakaoNotificationSender
 
@@ -8,6 +11,35 @@ class CredentialRepository:
     def get_credentials(self, _): return self.credentials
     def update_credentials(self, _, credentials): self.credentials=credentials; self.updated.append(credentials)
     def disconnect(self, connection_id): self.disconnected.append(connection_id)
+
+
+@pytest.mark.parametrize('origin,expected', [
+    ('https://pc-name.tailXXXXXX.ts.net', 'https://pc-name.tailXXXXXX.ts.net/app'),
+    ('https://pc-name.tailXXXXXX.ts.net/', 'https://pc-name.tailXXXXXX.ts.net/app'),
+    (None, 'http://127.0.0.1:8000/app'),
+])
+def test_message_links_use_web_origin_for_pc_and_mobile(monkeypatch, origin, expected):
+    if origin is None:
+        monkeypatch.delenv('WEB_ORIGIN', raising=False)
+    else:
+        monkeypatch.setenv('WEB_ORIGIN', origin)
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    repo = CredentialRepository(NotificationCredentials('access', None, None))
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={'result_code': 0})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        sender = KakaoNotificationSender(repo, rest_api_key='key', client=client)
+        sender.send(connection=NotificationConnection('id', 'owner', 'kakao', now), message='테스트 알림')
+
+    assert len(requests) == 1
+    template = json.loads(parse_qs(requests[0].content.decode())['template_object'][0])
+    assert template['link'] == {'web_url': expected, 'mobile_web_url': expected}
+    assert template['button_title'] == '자세히 보기'
+    assert template['text'] == '테스트 알림'
 
 def test_sender_refreshes_expiring_token_preserves_refresh_token_and_sends_once():
     now=datetime(2026, 1, 1, tzinfo=timezone.utc)
