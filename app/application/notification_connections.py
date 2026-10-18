@@ -30,9 +30,11 @@ class KakaoNotificationConnectionService:
         self.client_secret = client_secret
         self.client = client or httpx.Client(timeout=30)
 
-    def authorize(self, owner_id: str) -> str:
+    def authorize(self, owner_id: str, *, client: str = "electron") -> str:
+        if client not in {"electron", "web"}:
+            raise ValueError("unsupported notification client")
         state = self.state_cipher.encrypt(
-            json.dumps({"owner_id": owner_id}).encode()
+            json.dumps({"owner_id": owner_id, "client": client}).encode()
         ).decode()
         query = urlencode(
             {
@@ -45,14 +47,22 @@ class KakaoNotificationConnectionService:
         )
         return f"https://kauth.kakao.com/oauth/authorize?{query}"
 
-    def owner_id_from_state(self, state: str) -> str:
+    def context_from_state(self, state: str) -> dict[str, str]:
         try:
             payload = self.state_cipher.decrypt(unquote(state).encode(), ttl=300)
-            return json.loads(payload)["owner_id"]
+            context = json.loads(payload)
+            owner_id = context["owner_id"]
+            client = context.get("client", "electron")
+            if not isinstance(owner_id, str) or not owner_id or client not in {"electron", "web"}:
+                raise ValueError("invalid notification connection state")
+            return {"owner_id": owner_id, "client": client}
         except (InvalidToken, KeyError, ValueError, json.JSONDecodeError) as exc:
             raise NotificationConnectionError(
                 "invalid or expired notification connection state"
             ) from exc
+
+    def owner_id_from_state(self, state: str) -> str:
+        return self.context_from_state(state)["owner_id"]
 
     def complete(
         self,
