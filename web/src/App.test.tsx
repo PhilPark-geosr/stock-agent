@@ -24,7 +24,7 @@ function apiWith(overrides: Partial<WebApi> = {}): WebApi {
     analysisDetail: vi.fn().mockResolvedValue({ ...history[0], key_reasons: ['추세 회복'], risk_factors: ['변동성'], support_levels: {}, alert_reason: null, raw_result: { internal: 'hidden' } }),
     runAnalysis: vi.fn(), alertConditions: vi.fn().mockResolvedValue([]), addAlertCondition: vi.fn(), removeAlertCondition: vi.fn(),
     notificationConnection: vi.fn().mockResolvedValue({ connected: false, connection_id: null }),
-    authorizeNotification: vi.fn(), disconnectNotification: vi.fn(),
+    authorizeNotification: vi.fn(), disconnectNotification: vi.fn(), sendTestNotification: vi.fn(),
     ...overrides,
   };
 }

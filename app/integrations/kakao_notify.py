@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -56,11 +57,17 @@ class KakaoNotificationSender:
             raise KakaoNotifyError("Kakao memo request did not succeed")
 
     def _send(self, access_token: str, message: str) -> httpx.Response:
+        origin = os.getenv("WEB_ORIGIN", "http://127.0.0.1:8000").rstrip("/")
+        app_url = f"{origin}/app"
         template = json.dumps(
             {
                 "object_type": "text",
                 "text": message.strip(),
-                "link": {},
+                "link": {
+                    "web_url": app_url,
+                    "mobile_web_url": app_url,
+                },
+                "button_title": "자세히 보기",
             },
             ensure_ascii=False,
         )

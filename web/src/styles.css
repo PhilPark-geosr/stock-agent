@@ -167,6 +167,8 @@ h2 { margin: 0; font: 500 30px/1.1 Georgia, "Times New Roman", serif; letter-spa
 .condition-list small { color: #60716c; }
 .connection-state { margin: 22px 0; font-weight: 700; }
 .connection-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.test-notification { display: contents; }
+.test-notification .notice { flex-basis: 100%; margin: 0; }
 .analysis-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 24px 0; }
 .analysis-metrics div { padding: 13px; border: 1px solid rgba(255,255,255,.22); }
 .analysis-metrics dt { color: #bfd0c8; font-size: 12px; }
