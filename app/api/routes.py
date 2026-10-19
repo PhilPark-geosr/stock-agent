@@ -34,6 +34,7 @@ from app.application.notification_connections import NotificationConnectionError
 from app.domain.symbols import StockSymbol
 from app.application.stock_search import SecuritySelectionService
 from app.repositories.catalog import CatalogConflict, SecurityCatalogReader
+from app.repositories.catalog_operations import CatalogAlertGate
 from app.application.custom_rule_agent import CustomRuleAgentError
 from app.integrations.kakao_auth import (
     KakaoAuthError,
@@ -323,8 +324,11 @@ def link_watchlist_security(
 def list_watchlist_items(
     account: UserAccount = Depends(require_beta_access),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
+    db: Session = Depends(get_db),
 ):
-    return watchlist_repository.list(account.id)
+    gate = CatalogAlertGate(db)
+    return [WatchlistItemRead.model_validate(item).model_copy(update={"alert_hold_reason": gate.reason(item.id)})
+            for item in watchlist_repository.list(account.id)]
 
 
 @router.delete("/watchlist/{symbol}", status_code=status.HTTP_204_NO_CONTENT)

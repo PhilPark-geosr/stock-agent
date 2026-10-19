@@ -7,7 +7,7 @@ function createWatchlistController({ backend, renderScreen, showToast, showView,
     state.stocks = items.map((item) => ({
       ...item,
       name: item.security_name || item.symbol,
-      alertStatus: item.symbol === state.selectedSymbol ? "불러오는 중" : "분석 대기"
+      alertStatus: item.alert_hold_reason || (item.symbol === state.selectedSymbol ? "불러오는 중" : "분석 대기")
     }));
     if (!state.stocks.some((stock) => stock.symbol === state.selectedSymbol)) {
       state.selectedSymbol = state.stocks[0]?.symbol || null;

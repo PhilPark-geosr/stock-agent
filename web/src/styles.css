@@ -234,3 +234,6 @@ button:focus-visible, a:focus-visible { outline: 3px solid #dcaa38; outline-offs
 .security-link-panel label { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; line-height: 1.6; overflow-wrap: anywhere; }
 .security-link-panel input { flex: 0 0 auto; margin-top: 6px; }
 .security-link-panel button { margin: 5px 8px 5px 0; padding: 10px; }
+
+.watchlist li:has(.alert-hold-reason) { flex-wrap: wrap; }
+.alert-hold-reason { flex-basis: 100%; order: 2; font-size: .85rem; color: #805416; }

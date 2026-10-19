@@ -37,9 +37,10 @@ class CatalogScope:
     def __init__(self, db, reader): self.db, self.reader = db, reader
 
     def candidates(self, owner):
+        delistings = self.reader.confirmed_delistings()
         metadata = {c: self.reader.metadata(c) for c in ("KR", "US")}
-        return [SearchCandidate(r.id, r.symbol, r.name, r.country, r.status, r.id,
-                    aliases=tuple(r.aliases), selectable=r.status == "active" and metadata[r.country]["state"] == "READY",
+        return [SearchCandidate(r.id, r.symbol, r.name, r.country, self.reader.effective_status(r, delistings), r.id,
+                    aliases=tuple(r.aliases), selectable=self.reader.effective_status(r, delistings) == "active" and metadata[r.country]["state"] == "READY",
                     note=r.exchange + " · " + ("우선주" if r.kind == "preferred" else "보통주"),
                     source_date=r.source_date.isoformat())
                 for r in self.db.scalars(select(SecurityRecord))]
@@ -53,12 +54,13 @@ class WatchlistScope:
             WatchlistSubscription.security_id == SecurityRecord.id).where(
                 WatchlistSubscription.owner_id == owner, WatchlistSubscription.ended_at.is_(None)))
         result = []
+        delistings = self.reader.confirmed_delistings()
         for subscription, security in rows:
             country = security.country if security else ("KR" if subscription.symbol.endswith((".KS", ".KQ")) else "US")
             result.append(SearchCandidate(str(subscription.id), subscription.symbol,
-                security.name if security else subscription.symbol, country, security.status if security else "unknown",
+                security.name if security else subscription.symbol, country, self.reader.effective_status(security, delistings) if security else "unknown",
                 security.id if security else None, subscription.id, tuple(security.aliases) if security else (),
-                bool(security and security.status == "active" and security.symbol == subscription.symbol and
+                bool(security and self.reader.effective_status(security, delistings) == "active" and security.symbol == subscription.symbol and
                      self.reader.metadata(country)["state"] == "READY"),
                 "내 관심종목" if security else "종목 연결 확인 필요 — 관심종목에서 같은 종목을 확인해 연결하세요",
                 security.source_date.isoformat() if security else None))

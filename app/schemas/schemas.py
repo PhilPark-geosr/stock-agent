@@ -143,6 +143,7 @@ class WatchlistItemRead(BaseModel):
     symbol: str
     security_id: str | None = None
     security_name: str | None = None
+    alert_hold_reason: str | None = None
     created_at: datetime
 
 

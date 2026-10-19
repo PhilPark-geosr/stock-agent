@@ -54,11 +54,18 @@ class KrxCatalogSource:
             for market, suffix, endpoint in (("KOSPI", ".KS", "stk_isu_base_info"), ("KOSDAQ", ".KQ", "ksq_isu_base_info")):
                 response = client.get(f"https://data-dbg.krx.co.kr/svc/apis/sto/{endpoint}",
                                       headers={"AUTH_KEY": self.key}, params={"basDd": day.strftime("%Y%m%d")})
+                if response.status_code == 429:
+                    raise CatalogSourceError("provider_rate_limit")
                 response.raise_for_status()
                 rows = response.json().get("OutBlock_1")
                 if not isinstance(rows, list) or not rows:
                     raise CatalogSourceError("provider_incomplete")
+                required = {"KIND_STKCERT_TP_NM", "ISU_SRT_CD", "ISU_CD", "ISU_ABBRV", "LIST_DD"}
                 for row in rows:
+                    if not isinstance(row, dict) or not required <= row.keys():
+                        raise CatalogSourceError("provider_invalid_schema")
+                    if row.get("BAS_DD") and row["BAS_DD"].replace("/", "").replace("-", "") != day.strftime("%Y%m%d"):
+                        raise CatalogSourceError("provider_source_date_mismatch")
                     kind = {"보통주": "common", "우선주": "preferred"}.get(row["KIND_STKCERT_TP_NM"])
                     if not kind:
                         continue
@@ -100,7 +107,9 @@ class AlphaVantageCatalogSource:
                 count = 0
                 for row in reader:
                     count += 1
-                    if row["assetType"] != "Stock" or re.search(r"\b(warrants?|rights?|units?|notes?|ETN)\b", row["name"], re.I):
+                    if row["assetType"] != "Stock" or re.search(r"\b(warrants?|rights?|units?|notes?|ETN|preferred|preference|depositary shares)\b", row["name"], re.I):
+                        continue
+                    if row["exchange"] not in {"NASDAQ", "NYSE", "AMEX"}:
                         continue
                     # Do not manufacture a durable identity from a ticker with no listing date.
                     if row["ipoDate"] in ("", "null", "None"):
@@ -116,7 +125,7 @@ class AlphaVantageCatalogSource:
                     symbol = row["symbol"].replace(".", "-")
                     entries.append(CatalogEntry(identity=f"{row['symbol']}:{listed}:{row['exchange']}",
                         symbol=symbol, name=row["name"], exchange=row["exchange"], listed_on=listed,
-                        delisted_on=removed, kind="preferred" if re.search(r"prefer", row["name"], re.I) else "common"))
+                        delisted_on=removed, kind="common", aliases=[row["symbol"]] if symbol != row["symbol"] else []))
                 if not count:
                     raise CatalogSourceError("provider_incomplete")
         return CatalogBatch(country="US", source="ALPHA_VANTAGE", source_date=day, fetched_at=now,

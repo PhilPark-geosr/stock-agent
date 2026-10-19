@@ -26,6 +26,7 @@ export interface WatchlistItem {
   created_at: string;
   security_id?: string | null;
   security_name?: string | null;
+  alert_hold_reason?: string | null;
 }
 
 export interface AnalysisHistoryItem {
