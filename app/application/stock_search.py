@@ -60,7 +60,7 @@ class WatchlistScope:
                 security.id if security else None, subscription.id, tuple(security.aliases) if security else (),
                 bool(security and security.status == "active" and security.symbol == subscription.symbol and
                      self.reader.metadata(country)["state"] == "READY"),
-                "내 관심종목" if security else "종목 연결 확인 필요 — 삭제 후 목록에서 다시 등록",
+                "내 관심종목" if security else "종목 연결 확인 필요 — 기존 관심종목을 유지하고 관리자에게 문의하세요",
                 security.source_date.isoformat() if security else None))
         return result
 
@@ -130,7 +130,7 @@ class SecuritySelectionService:
         if not row:
             raise LookupError("선택한 관심종목이 삭제되거나 변경됐습니다.")
         if not row.security_id:
-            raise CatalogConflict("기존 종목 연결을 확인해야 합니다. 목록에서 다시 등록하세요.")
+            raise CatalogConflict("기존 종목 연결 확인이 필요합니다. 관심종목을 삭제하면 기존 알림 조건이 종료됩니다. 기존 등록을 유지하고 관리자에게 문의하세요.")
         self.reader.require_active(row.security_id, symbol, lock=lock)
         return row
 
