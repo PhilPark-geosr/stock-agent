@@ -18,7 +18,7 @@
 
 ### 실제 코드와 아직 구현되지 않은 것
 
-2026-10-05 원격 확인: main `12ba6a4`, 설계 PR [#38](https://github.com/PhilPark-geosr/stock-agent/pull/38) 열림, 브리핑 PR [#36](https://github.com/PhilPark-geosr/stock-agent/pull/36) `a97f1ce` 열림. 아래는 책임 모델이다. codex/stock-search-implementation에서 세 검색 범위·정렬·대상 색인·UI를 구체화했으며 [실제 클래스/함수 대응과 API](https://github.com/PhilPark-geosr/stock-agent/blob/codex/stock-search-implementation/docs/stock_search_operations.md)를 함께 읽는다. 운영 정책과 공급자 실계정 검증은 대기 중이다.
+2026-10-05 원격 확인: main `12ba6a4`, 설계 PR [#38](https://github.com/PhilPark-geosr/stock-agent/pull/38) 열림, 브리핑 PR [#36](https://github.com/PhilPark-geosr/stock-agent/pull/36) `a97f1ce` 열림. 아래는 책임 모델이다. codex/stock-search-implementation에서 세 검색 범위·정렬·대상 색인·UI를 구체화했으며 [실제 클래스/함수 대응과 API](https://github.com/PhilPark-geosr/stock-agent/blob/codex/stock-search-implementation/docs/stock_search_operations.md)를 함께 읽는다. 운영 정책은 2026-10-19 갱신 설계의 확정 절을 따른다. 공급자 실계정 검증은 별도로 대기 중이다.
 
 | 확인한 코드 | 현재 동작 | 이번 설계의 연결 |
 | --- | --- | --- |
@@ -95,7 +95,7 @@ flowchart LR
 | FR-C04 | 이름·코드·시장·주식 종류·상태·기준 시점으로 후보 구별. UC-W/A/B |
 | FR-W01 | 전체 지원 주식 중 신규 지정 가능 종목으로 본인의 구독을 등록. UC-W |
 | FR-A01 | 본인의 활성 구독만 후보화, 저장 직전 동일 구독의 소유·활성 상태 재확인. UC-A |
-| FR-A02 | 상장폐지·확인 불가 종목에는 새 알림 조건을 저장하지 않고 이유 표시. 기존 조건의 자동 종료·복원은 수행하지 않음. UC-A, 구현 제안 |
+| FR-A02 | 상장폐지·확인 불가 종목에는 새 알림 조건을 저장하지 않고 이유 표시. 기존 조건의 자동 종료·복원은 수행하지 않음. UC-A, 2026-10-19 확정 |
 | FR-B01 | 저장 브리핑의 대상 종목으로 검색하며 본문의 임의 문자열 검색과 구별. 종목·기간으로 기존 목록 조회. UC-B |
 | FR-B02 | 후보·건수·목록·상세 모두 소유자 범위 적용. UC-B |
 | FR-B03 | 관심종목 삭제·상장폐지 후에도 본인 과거 기록 유지·열람. UC-B, 2026-10-05 사용자 확정 |
@@ -196,7 +196,7 @@ sequenceDiagram
 
 ### 5.1 설계 선택
 
-**확정 범위와 제안의 구분:** 세 검색 범위와 본인의 삭제·상폐 종목 과거 기록 열람은 사용자 결정이다. FR-A02의 신규 알림 제한 방식은 제안이며, 아래 상태 검사 분기도 이 제안을 전제로 한 OOD다. 공급자·갱신 간격·자료 이용 한도는 별도 갱신 설계의 제안이다. 도표를 작성했다는 이유로 이 정책들이 사용자 합의 완료가 되지는 않는다.
+**2026-10-19 확정:** 세 검색 범위와 과거 기록 보존에 더해 FR-A02의 신규 제한 및 FR-A03의 기존 알림 보류·재개를 적용한다. 주기·신선도·보존·공급자 범위는 갱신 설계의 확정 절을 따른다. 실제 계정 검증 성공과 정책 확정은 구분한다.
 
 v2의 `SecuritySelectionService`를 **목적에 따른 검색 범위를 받는 공통 서비스**로 구체화한다. 서비스가 모든 후속 작업을 처리하지 않는다. `CandidateScope`는 범위별 데이터 조회 계약이며 세 구현을 둔다. 객체 수만큼 파일·서버를 만들 필요는 없고 기존 저장소와 모듈에 책임을 배치할 수 있다.
 
@@ -334,7 +334,7 @@ classDiagram
 | --- | --- |
 | `securityId`, 이름·코드·시장·종류·상장 상태·검증된 별칭 | 후보를 구별하고 사용처에 맞게 신규 지정 가능 여부를 판단한다. 과거 브리핑에 현재 상장 여부를 일괄 적용하지 않는다. |
 | 국가별 `catalogVersion`, `sourceAsOf`, `dataState` | 완결된 게시 버전만 읽는다. 갱신 중에는 직전 유효본을 읽으며, 지연·이용 불가를 정상 0건과 구별한다. |
-| `READY / STALE / UNAVAILABLE` | STALE은 마지막 검증본과 실제 시점을 안내한다. 현 구현 제안에서는 STALE과 UNAVAILABLE이면 신규 등록·새 알림 설정을 제한하되 저장 브리핑은 계속 열람한다. 상태 산정 기준은 갱신 기능이 소유한다. |
+| `READY / STALE / UNAVAILABLE` | STALE은 마지막 검증본과 실제 시점을 안내한다. 확정 운영 정책에서는 STALE과 UNAVAILABLE이면 신규 등록·새 알림 설정을 제한하되 저장 브리핑은 계속 열람한다. 상태 산정 기준은 갱신 기능이 소유한다. |
 | 종목 식별·코드 유효기간 이력 | 과거 브리핑의 당시 symbol을 같은 종목에 연결할 근거로만 사용한다. 입증하지 못한 기록은 미해석 상태로 보존한다. |
 
 ```mermaid
@@ -439,3 +439,97 @@ AGENTS 자체 검토: (1) 세 UC는 사용자 목표, (2) Essential Style, (3) B
 ## 11. 구현에서 확인한 정책
 
 기존 구독의 종목 ID는 추정 연결하지 않아 NULL로 보존한다. 연결 확인 없이 새 알림을 만들 수 없으며, 단순 삭제/재등록은 기존 알림 종료를 수반하므로 이전 절차를 결정해야 한다. 기존 알림의 자동 중지·복원은 별도 미결이다. 검색은 외부 API를 호출하지 않고 저장 직전에 현재 DB 상태와 동일 구독을 재확인한다. 상세 API·지연/자료 범위 제약은 [구현·운영 문서](https://github.com/PhilPark-geosr/stock-agent/blob/codex/stock-search-implementation/docs/stock_search_operations.md)를 따른다.
+
+
+## 기존 관심종목 연결 보완 — 2026-10-19 확정
+
+사용자 결정: **본인이 같은 종목임을 확인한 후 기존 구독·알림 조건·과거 브리핑을 보존하며 연결한다.** 새 독립 유스케이스를 만들지 않고 UC-W(관심종목 등록·관리)의 기존 등록 확인 대안 흐름을 보완한다. 시스템 경계와 액터는 기존 설계를 유지한다.
+
+### OOA 보완
+
+| 항목 | 내용 |
+| --- | --- |
+| ID / 이름 | UC-W의 기존 대상 확인 대안 / 관심종목 관리 |
+| 목적 | 이전에 등록한 관심종목을 계속 관찰하면서 기존 조건과 기록을 유지한다 |
+| 주 액터 | 사용자 |
+| 트리거 | 기존 관심종목의 대상 확인이 필요하다는 안내를 받는다 |
+| 사전조건 | 본인의 유효한 관심종목이 존재하며 종목 연결이 아직 확인되지 않았다 |
+| 기본 흐름 | ① 사용자가 기존 관심종목의 대상을 확인하려 한다. ② 시스템이 확인 가능한 종목의 이름·코드·시장·자료 시점을 제시한다. ③ 사용자가 같은 종목임을 명시적으로 확인한다. ④ 시스템이 대상 확인 결과를 알리고 기존 관심종목과 알림 조건을 유지한다 |
+| 대안·예외 | 취소하면 아무것도 바뀌지 않는다. 정보 지연·상폐·대상 불일치·다른 종목 연결·기존 등록 종료가 확인되면 이유를 알리고 반영하지 않는다. 같은 확인을 반복해도 중복 등록하지 않는다 |
+| 성공 보장 | 관심종목과 기존 조건의 연속성이 유지된다. 과거 브리핑 내용과 당시 대상 해석은 바뀌지 않는다 |
+
+| 요구사항 | 상세 계약 |
+| --- | --- |
+| FR-L01 → UC-W | 후보를 자동 확정하지 않는다. 같은 코드의 후보를 표시하고 사용자 확인 후 기존 구독에 연결한다 |
+| FR-L02 → UC-W, FR-C03 | 소유·활성 상태, 후보의 active/READY와 코드 일치, 등록일 이전 또는 당일 상장 여부를 서버에서 재확인한다. 다른 연결을 덮어쓰거나 삭제·재등록된 구독으로 대체하지 않는다 |
+| FR-L03 → UC-W, FR-A01, FR-B04 | 구독 식별·시작 시점, 기존 조건의 활성/비활성 설정과 과거 브리핑 원본·색인을 보존한다. 동일 요청은 같은 연결 결과로 수렴한다 |
+
+### 도메인 → 관계 중심 시퀀스
+
+```mermaid
+classDiagram
+  사용자계정 "1" -- "0..*" 관심종목구독 : 소유
+  관심종목구독 "0..*" --> "0..1" 상장종목 : 사용자 확인으로 연결
+  관심종목구독 "1" -- "0..*" 사용자알림조건 : 기존 관계 유지
+  과거브리핑 --> 당시종목정보 : 소급 변경 없음
+```
+
+```mermaid
+sequenceDiagram
+  actor U as 사용자
+  participant UI as 관심종목 화면
+  participant S as 종목 선택 서비스
+  participant C as 게시된 종목정보
+  participant W as 기존 관심종목
+  U->>UI: 기존 대상 확인 요청
+  UI->>S: 확인 가능한 후보 요청
+  S->>C: 게시된 후보 확인
+  C-->>UI: 이름·코드·시장·자료 시점
+  U->>UI: 같은 종목임을 확인
+  UI->>S: 기존 관심종목의 대상 확인 전달
+  S->>C: 현재 정보 유효성 확인
+  S->>W: 소유·활성·기존 연결 확인 후 연결
+  W-->>UI: 동일 관심종목의 확인 결과
+  UI-->>U: 기존 조건·기록을 유지한 연결 완료
+```
+
+### 상세 클래스·인터페이스
+
+```mermaid
+classDiagram
+  class SecuritySelectionService {
+    +search(owner, scope, q, sort, country, limit, cursor)
+    +link_subscription(owner, key, symbol, security_id)
+  }
+  class SecurityCatalogReader {
+    +require_active(key, symbol, lock)
+  }
+  class WatchlistSubscription {
+    id
+    owner_id
+    symbol
+    security_id
+    security_name
+    created_at
+    ended_at
+  }
+  class WatchlistLink {
+    symbol
+    security_id
+    confirmed
+  }
+  SecuritySelectionService --> SecurityCatalogReader : FR-L02 재검증
+  SecuritySelectionService --> WatchlistSubscription : FR-L01/03 기존 관계 연결
+  WatchlistLink --> SecuritySelectionService : FR-L01 명시적 확인
+  SecurityCatalogReader --> SecurityRecord : 게시 정보
+  CustomAlertConditionRecord --> WatchlistSubscription : 기존 참조 유지
+  BriefingSubjectRecord --> BriefingRunRecord : 소급 수정 없음
+```
+
+`POST /watchlist/{subscription_id}/security-link`는 `{symbol, security_id, confirmed:true}`를 받으며 기존 WatchlistItemRead를 반환한다. 로그인·베타 권한과 웹 요청 위조 방지를 기존 변경 API와 동일하게 적용한다. confirmed는 엄격한 boolean true만 허용한다. 404는 본인 활성 구독 없음, 409는 후보·상태·기존 연결 충돌, 422는 확인 누락/거부 또는 입력 오류다.
+
+현재 정보의 국가별 게시 잠금을 확보한 뒤 동일 구독을 다시 읽고, 미연결·활성·본인 소유·같은 코드 조건을 갖춘 행의 연결 값만 갱신한다. 같은 종목으로 이미 연결됐다면 동일 결과를 반환한다. 코드 변경·재사용을 추정 이전하지 않으며 등록일 이후 상장된 후보는 사용자 확인만으로도 허용하지 않는다. 연결 자체는 조건 설정을 바꾸지 않는다. 알림 실행 보류·재개는 갱신 설계의 FR-A03 운영 정책을 따른다.
+
+데스크톱은 기존 종목 선택 후 확인창으로 연결하며, 웹은 미연결 관심종목의 ‘종목 정보 연결’에서 후보를 선택하고 확인한다. 취소·대상 변경·재시도에서 다른 구독으로 연결되지 않도록 확인한 식별자를 그대로 전달한다.
+
+자체 검토: UC는 내부 저장 구조를 노출하지 않는다. 시퀀스는 협력 관계를 먼저 설명하고 상세 API/잠금은 별도 문단에 둔다. 모든 추가 책임은 FR-L01~03에 추적된다. 과거 기록 보존과 사용자 확인은 이번 사용자 결정이며 다른 미결 운영 정책까지 승인된 것으로 보지 않는다.

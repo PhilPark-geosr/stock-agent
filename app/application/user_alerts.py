@@ -37,6 +37,7 @@ class UserAlertDispatcher:
         connection_repository,
         delivery_repository,
         sender,
+        catalog_gate=None,
     ) -> None:
         self.targets = target_query
         self.evaluations = evaluation_repository
@@ -44,6 +45,7 @@ class UserAlertDispatcher:
         self.connections = connection_repository
         self.deliveries = delivery_repository
         self.sender = sender
+        self.catalog_gate = catalog_gate
 
     def dispatch(self, analysis) -> UserAlertDispatchResult:
         counts = {
@@ -59,6 +61,9 @@ class UserAlertDispatcher:
             "delivery_failed": 0,
         }
         for target in self.targets.list_active_for_symbol(analysis.symbol):
+            if self.catalog_gate and not self.catalog_gate.allowed(target.subscription_id):
+                counts["skipped_inactive"] += 1
+                continue
             counts["eligible"] += 1
             reservation = self.evaluations.reserve(
                 analysis_id=analysis.id,
@@ -110,6 +115,10 @@ class UserAlertDispatcher:
             )
             if not delivery.created:
                 counts["skipped_duplicate"] += 1
+                continue
+            if self.catalog_gate and not self.catalog_gate.allowed(target.subscription_id):
+                self.deliveries.mark_failed(delivery.delivery.id, reason="catalog_hold")
+                counts["skipped_inactive"] += 1
                 continue
             try:
                 self.sender.send(connection=connection, message=evaluation.notification_message)

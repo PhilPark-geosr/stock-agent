@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import type { WatchlistItem } from '../api';
 
 interface Props {
@@ -10,9 +11,10 @@ interface Props {
   onAdd: (symbol: string) => Promise<boolean>;
   onSelect: (symbol: string) => void;
   onRemove: (item: WatchlistItem) => void;
+  renderLink?: (item: WatchlistItem) => ReactNode;
 }
 
-export function WatchlistPanel({ items, selectedSymbol, loading, adding, removing, onAdd, onSelect, onRemove }: Props) {
+export function WatchlistPanel({ items, selectedSymbol, loading, adding, removing, onAdd, onSelect, onRemove, renderLink }: Props) {
   const [symbol, setSymbol] = useState('');
   const [search, setSearch] = useState('');
   const query = search.trim().toUpperCase();
@@ -37,6 +39,8 @@ export function WatchlistPanel({ items, selectedSymbol, loading, adding, removin
     {loading ? <p className="loading" role="status">관심 종목을 불러오는 중…</p> : items.length === 0 ? <p className="empty-state">등록된 관심 종목이 없습니다. 종목 코드를 입력해 추가하세요.</p> : visible.length === 0 ? <p className="empty-state">일치하는 관심 종목이 없습니다.</p> :
       <ul className="watchlist" aria-label="관심 종목 목록">{visible.map(item => <li key={item.id} className={selectedSymbol === item.symbol ? 'selected' : ''}>
         <button className="watch-symbol" type="button" onClick={() => onSelect(item.symbol)} aria-label={`${item.symbol} 선택`}>{item.symbol}</button>
+        {item.alert_hold_reason && <span className="alert-hold-reason" role="status">{item.alert_hold_reason}</span>}
+        {!item.security_id && renderLink?.(item)}
         <button className="remove-button" type="button" onClick={() => onRemove(item)} disabled={removing === item.symbol} aria-label={`${item.symbol} 삭제`}>삭제</button>
       </li>)}</ul>}
   </section>;

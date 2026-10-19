@@ -67,3 +67,11 @@ describe('reusable beta panels', () => {
     expect(await screen.findByText('카카오 알림 연결 안 됨')).toBeVisible();
   });
 });
+
+
+it('shows an existing subscription hold without removing its selection or delete controls', () => {
+  render(<WatchlistPanel items={[{ id: 1, symbol: 'AAPL', created_at: '', security_id: 'id', alert_hold_reason: '종목 자료 갱신 필요 — 알림 보류' }]}
+    selectedSymbol="AAPL" loading={false} adding={false} removing={null} onAdd={vi.fn()} onSelect={vi.fn()} onRemove={vi.fn()} />);
+  expect(screen.getByRole('status')).toHaveTextContent('알림 보류');
+  expect(screen.getByRole('button', { name: 'AAPL 선택' })).toBeVisible();
+});

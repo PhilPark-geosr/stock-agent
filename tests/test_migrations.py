@@ -37,7 +37,7 @@ def test_known_legacy_database_is_stamped_without_losing_rows(tmp_path: Path) ->
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT symbol FROM watchlist_items WHERE id=1")) == "AAPL"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0012_merge_catalog_beta"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0013_catalog_operations"
         columns = {column["name"] for column in inspect(engine).get_columns("watchlist_items")}
         assert {"user_account_id", "ended_at"} <= columns
         condition_columns = {
@@ -120,7 +120,7 @@ def test_previous_head_preserves_all_existing_rows(tmp_path: Path, previous_revi
     with engine.connect() as connection:
         for name, rows in before.items():
             assert connection.execute(text(f'SELECT * FROM {name}')).all() == rows
-        assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '0012_merge_catalog_beta'
+        assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '0013_catalog_operations'
     assert 'invitations' in inspect(engine).get_table_names()
     assert 'user_beta_access_grants' in inspect(engine).get_table_names()
     assert 'briefing_runs' in inspect(engine).get_table_names()
@@ -128,3 +128,17 @@ def test_previous_head_preserves_all_existing_rows(tmp_path: Path, previous_revi
         column['name'] for column in inspect(engine).get_columns('briefing_preferences')
     }
     engine.dispose()
+
+
+def test_catalog_operations_upgrade_keeps_existing_attempt_and_snapshot(tmp_path):
+    from alembic import command
+    from app.core.migrations import _config
+    url = _url(tmp_path / 'operations.db')
+    command.upgrade(_config(url), '0012_merge_catalog_beta')
+    engine = create_engine(url)
+    with engine.begin() as db:
+        db.execute(text("INSERT INTO catalog_attempts(id,country,started_at,status) VALUES ('old','KR','2026-10-01','running')"))
+    migrate_database(url)
+    with engine.connect() as db:
+        assert db.execute(text("SELECT id,country,status,details FROM catalog_attempts")).one() == ('old', 'KR', 'running', None)
+        assert 'catalog_delisting_evidence' in inspect(engine).get_table_names()

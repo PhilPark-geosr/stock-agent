@@ -27,7 +27,7 @@ function createAnalysisController({ backend, renderScreen, showToast, showDialog
     }
     document.querySelector("#scheduler-status").textContent = "대기";
     const stock = state.stocks.find((item) => item.symbol === symbol);
-    if (stock) stock.alertStatus = analysis.shouldAlert ? "전송 대상" : "조건 미충족";
+    if (stock) stock.alertStatus = stock.alert_hold_reason || (analysis.shouldAlert ? "전송 대상" : "조건 미충족");
     renderScreen();
     return true;
   }

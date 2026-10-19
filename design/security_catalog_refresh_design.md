@@ -1,5 +1,7 @@
 # 종목 기준정보 주기적 갱신 설계
 
+> 2026-10-19: 운영 정책을 확정했다. 이 문서 마지막의 “운영 정책 확정 및 구현 보완”이 이전 초안의 주기·상태 제한·보존·공급자 제안을 대체한다. 실계정 검증은 별도 미완료다.
+
 2026-10-12 · v1.1 · [갱신 기능 쉬운 설명서](security_catalog_refresh_explainer.html) · [종목 검색 설계](stock_search_usage_design.md)
 
 ## 1. 목적과 시스템 경계
@@ -292,3 +294,102 @@ AGENTS 검토: UC-M01은 운영자의 목표이고 수집·검증·저장을 별
 ## 12. 구현 구체화 기록
 
 논리적 클래스·저장 구조는 책임 설명이며 물리 테이블을 각각 강제하지 않는다. 현재 구현은 원본 판본에 코드·별칭 이력을 함께 보존하고 SecurityCatalogWriter가 lease와 게시를 조정한다. [구현 대응표와 API 요청·제약](https://github.com/PhilPark-geosr/stock-agent/blob/codex/stock-search-implementation/docs/stock_search_operations.md)를 함께 읽는다. 과거 코드 연결은 입증할 수 있는 경우에만 하며 초기 이관은 미해석 스냅샷으로 보존한다.
+
+
+## 2026-10-19 운영 정책 확정 및 구현 보완
+
+사용자가 남은 정책을 정하고 구현하도록 위임했다. 아래는 이전의 제안값을 대체하는 운영 결정이다. 공급자 실계정 검증은 정책 결정과 별개의 사실 확인이며 키가 없으면 미검증으로 남긴다.
+
+| 항목 | 확정 정책 |
+| --- | --- |
+| 주기·요청 예산 | 한국 최소 60분, 미국 최소 360분. 배치당 최대 2회. 최근 24시간 한국 96회·미국 20회 내부 예산에 실패·진단 요청도 포함한다. 실제 계정의 공유 사용량은 별도이며 429/제한 응답은 24시간 유예한다 |
+| 신선도 | 원천일 7일 초과 또는 정상 수집 48시간 초과는 STALE, 정상 게시 없음은 UNAVAILABLE. 경계값 이하는 허용한다. 시간 비교는 UTC, 상폐 효력일은 한국 날짜다 |
+| 발표 지연 | 거래소 달력상 마감 2시간 이후의 거래일을 요청한다. 이는 요청 기준일 선택 정책이지 공급자 발표 SLA가 아니다. 빈/불완전/미래/후퇴 자료는 게시하지 않는다 |
+| 한국 상폐 | KRX KIND 상장폐지현황·상장폐지 공시를 근거 원천으로 선정한다. 운영자가 표준코드·효력일·정확한 공식 문서 URL을 확인해 등록한다. 자동 스크래핑 API를 검증했다고 주장하지 않는다. 정정은 기존 근거를 삭제하지 않고 사유와 함께 철회한다 |
+| 미국 범위 | Alpha Vantage의 Stock 중 NASDAQ/NYSE/AMEX, 지원 티커 형식과 상장일이 있는 행만 수용. ADR·REIT·SPAC의 보통주도 제공자가 Stock으로 분류하면 포함한다. ETF·ETN·우선주·권리·워런트·유닛·노트는 확인 가능한 유형/명칭으로 제외. 이름 기반 필터는 완전한 상품 분류의 보장이 아니다 |
+| 미국 동일성·별칭 | 티커+상장일+거래소를 관측 식별로 유지. 코드 변경·시장 이전은 추정 병합하지 않는다. 원문 이름과 원문 티커만 검색하며 미검증 한글 별칭은 추가하지 않는다 |
+| 기존 알림 | 본인 활성 구독의 확인된 동일 종목이 active+READY인 경우만 시스템 알림·사용자 조건 평가/발송. 미연결·상폐·unknown·pending·STALE·UNAVAILABLE은 보류. 조건 enabled/ended_at을 변경하지 않는다 |
+| 복원 | 같은 종목이 active+READY로 회복되면 다음 새 분석부터 자동 재개. 사용자가 꺼둔 조건은 그대로 꺼짐. 과거 실패/보류분을 재발송하는 작업은 만들지 않는다. 평가 전과 발송 직전에 재확인한다 |
+| 보존 | 배치 원문 90일, 종료된 실행 이력 365일. 현재 게시 버전은 기간과 무관하게 유지한다. 종목 식별·상폐 근거(철회 포함)·사용자 구독·조건·브리핑은 정리 대상에서 제외한다. 정리는 국가별 게시 잠금과 같은 경계를 사용한다 |
+
+### OOA 및 추적
+
+UC-M01 기본 흐름 ④의 운영 결과 확인에 ‘실제 공급자 응답의 계약 검증 결과와 검증 한계’를 포함한다. 대안 흐름은 ‘상폐 근거가 추가되면 운영자가 근거와 효력 시점을 확인하고 시스템이 반영한다; 정정 근거가 확인되면 기존 근거를 철회하고 이력을 보존한다’이다. 외부 액터는 운영자·KRX/KIND·Alpha Vantage이고 내부 DB·실행기는 액터가 아니다. 성공 보장은 검증된 대상의 효력일 반영과 이전 기록 보존이다. 실제 계정 미설정·상폐 근거 불충분은 사유를 알리고 확정하지 않는다.
+
+| 추가 요구 | 추적 |
+| --- | --- |
+| FR-U06 | 실행 전에 설정·내부 요청 예산을 검사하고 실제 응답 검증과 미검증 항목을 기록한다. UC-M01 |
+| FR-U07 | KIND 근거의 대상·효력일·검토자·공식 URL과 철회 이력을 보존한다. 목록 누락과 상폐 확정을 구분한다. UC-M01 |
+| FR-U08 | 정해진 기간의 운영 이력만 정리하며 현재 게시본·상폐 근거·사용자 기록은 보존한다. UC-M01 |
+| FR-A03 | 기존 알림을 현재 종목/자료 상태로 보류·자동 재개하고 설정값을 보존한다. 기존 알림 유스케이스 UC-A, FR-A01/02 |
+
+### 도메인 → 관계 중심 시퀀스
+
+```mermaid
+classDiagram
+  상장종목 "1" -- "0..*" 상폐확인근거 : 효력일과 철회 이력
+  종목정보게시본 --> 자료이용상태 : 신선도
+  관심종목구독 --> 상장종목 : 확인된 대상
+  알림보류판정 --> 관심종목구독
+  알림보류판정 --> 자료이용상태
+```
+
+```mermaid
+sequenceDiagram
+  actor O as 운영자
+  participant R as 갱신 실행
+  participant P as 공급자
+  participant C as 게시된 종목정보
+  participant A as 알림 처리
+  O->>R: 운영 기준에 따른 실행 또는 진단
+  R->>R: 설정·요청 예산 확인
+  R->>P: 지원 범위의 자료 요청
+  P-->>R: 응답 자료
+  R->>C: 검증한 자료 게시 또는 진단 결과 보존
+  O->>C: KIND 상폐 근거 확인 또는 정정
+  A->>C: 현재 대상·자료 상태 확인
+  C-->>A: 실행 가능 또는 보류 사유
+  A->>C: 발송 직전 재확인
+```
+
+### 상세 책임
+
+```mermaid
+classDiagram
+  class CatalogPolicy {
+    +interval(country)
+    +request_budget(country)
+    max_source_age_days
+    max_fetch_age_hours
+    snapshot_days
+    attempt_days
+  }
+  class SecurityCatalogReader {
+    +metadata(country)
+    +effective_status(security)
+    +require_active(key, symbol, lock)
+  }
+  class CatalogAlertGate {
+    +reason(subscription_id)
+    +allowed(subscription_id)
+  }
+  class CatalogMaintenance {
+    +record_delisting(evidence)
+    +revoke_delisting(id, reason)
+    +prune()
+  }
+  CatalogAlertGate --> SecurityCatalogReader : FR-A03
+  CatalogAlertGate --> WatchlistSubscription
+  SecurityCatalogReader --> CatalogDelistingRecord : FR-U07
+  CatalogMaintenance --> CatalogDelistingRecord
+  CatalogMaintenance --> CatalogRevisionRecord : FR-U08
+  CatalogMaintenance --> CatalogAttemptRecord
+  SecurityCatalogWriter --> CatalogPolicy : FR-U06
+  SecurityCatalogReader --> CatalogPolicy
+  UserAlertDispatcher --> CatalogAlertGate
+  SystemAlertDispatcher --> CatalogAlertGate
+```
+
+KIND 근거는 운영자 전용 로컬 CLI로 명시적으로 등록·철회한다. HTTP 공개 변경 API는 만들지 않는다. CLI 진단도 국가별 lease와 요청 예산을 공유하며 정상 목록을 게시하지 않는다. 상태 조회는 읽기 전용을 유지한다. 감사 정리는 실행 중 lease가 있으면 건너뛴다.
+
+근거: [KIND 상장폐지현황](https://kind.krx.co.kr/investwarn/delcompany.do?method=searchDelCompanyMain), [Alpha Vantage LISTING_STATUS](https://www.alphavantage.co/documentation/#listing-status), [Alpha Vantage 요청 한도 안내](https://www.alphavantage.co/premium/). KRX 승인 계정 한도와 공급자 발표 지연은 실제 계정으로 확인해야 하며 내부 예산을 공급자 보장 한도로 표현하지 않는다.

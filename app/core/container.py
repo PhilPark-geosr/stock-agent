@@ -27,6 +27,7 @@ from app.repositories import (
 from app.services import AnalysisService
 from app.integrations.kakao_auth import kakao_settings
 from app.integrations.kakao_notify import KakaoNotificationSender
+from app.repositories.catalog_operations import CatalogAlertGate
 from app.repositories.notifications import (
     SqlAlchemyAlertEvaluationRepository,
     SqlAlchemyNotificationConnectionRepository,
@@ -87,6 +88,7 @@ def build_system_alert_dispatcher(db: Session):
         watchlist_repository=SqlAlchemyWatchlistRepository(db),
         connection_repository=connections,
         delivery_repository=SqlAlchemyNotificationDeliveryRepository(db),
+        catalog_gate=CatalogAlertGate(db),
         sender=KakaoNotificationSender(
             connections,
             rest_api_key=str(settings["rest_api_key"]),
@@ -121,6 +123,7 @@ def build_user_alert_dispatcher(db: Session):
         ),
         connection_repository=connections,
         delivery_repository=SqlAlchemyNotificationDeliveryRepository(db),
+        catalog_gate=CatalogAlertGate(db),
         sender=sender,
     )
 

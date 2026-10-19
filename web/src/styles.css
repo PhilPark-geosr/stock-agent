@@ -225,3 +225,15 @@ button:focus-visible, a:focus-visible { outline: 3px solid #dcaa38; outline-offs
   .connection-actions { flex-direction: column; align-items: stretch; }
   .condition-list li { align-items: start; }
 }
+
+/* Existing subscriptions stay visible while their catalog identity is confirmed. */
+.watchlist li:has(.security-link-panel) { flex-wrap: wrap; }
+.security-link-panel { flex-basis: 100%; order: 3; padding: 16px; background: #f3f6ef; border: 1px solid #c9d3cc; border-radius: 6px; }
+.security-link-panel p { line-height: 1.6; }
+.security-link-panel fieldset { margin: 12px 0; border: 1px solid #c9d3cc; }
+.security-link-panel label { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; line-height: 1.6; overflow-wrap: anywhere; }
+.security-link-panel input { flex: 0 0 auto; margin-top: 6px; }
+.security-link-panel button { margin: 5px 8px 5px 0; padding: 10px; }
+
+.watchlist li:has(.alert-hold-reason) { flex-wrap: wrap; }
+.alert-hold-reason { flex-basis: 100%; order: 2; font-size: .85rem; color: #805416; }

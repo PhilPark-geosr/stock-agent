@@ -425,3 +425,23 @@ def test_scheduler_endpoint_requires_operator(beta_web_client, db_session, monke
     monkeypatch.setenv("ADMIN_ACCOUNT_ID", account.id)
     beta_web_client.cookies.set(COOKIE_NAME, token)
     assert beta_web_client.post("/scheduler/run?force=true").status_code == 403
+
+
+def test_security_link_requires_beta_and_trusted_cookie_origin(beta_web_client, db_session):
+    from app.domain.symbols import StockSymbol
+    from app.repositories.repositories import WatchlistRepository
+    account = _account(db_session, "legacy-member")
+    row = WatchlistRepository(db_session).add(account.id, StockSymbol.of("AAPL"))
+    endpoint = f"/watchlist/{row.id}/security-link"
+    body = {"symbol": "AAPL", "security_id": "test-AAPL", "confirmed": True}
+    assert beta_web_client.post(endpoint, json=body, headers={"Origin": ORIGIN}).status_code == 401
+    _login(beta_web_client, db_session, account)
+    assert beta_web_client.post(endpoint, json=body, headers={"Origin": ORIGIN}).status_code == 403
+    issued = _issue(db_session, now=datetime.now(timezone.utc))
+    beta_web_client.post("/auth/web/invitations/redeem", json={"code": issued.code}, headers={"Origin": ORIGIN})
+    for headers in ({}, {"Origin": "https://evil.test"}):
+        assert beta_web_client.post(endpoint, json=body, headers=headers).status_code == 403
+    assert row.security_id is None
+    response = beta_web_client.post(endpoint, json=body, headers={"Origin": ORIGIN})
+    assert response.status_code == 200
+    assert response.json()["id"] == row.id
