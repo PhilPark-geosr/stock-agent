@@ -50,6 +50,7 @@ from app.schemas import (
     CustomAlertConditionCreate,
     CustomAlertConditionRead,
     WatchlistCreate,
+    WatchlistLink,
     WatchlistItemRead,
 )
 from app.services.scheduler import run_scheduled_batch
@@ -298,6 +299,22 @@ def add_watchlist_item(
         security = SecurityCatalogReader(db).require_active(payload.security_id, payload.symbol, lock=True)
         return watchlist_repository.add(account.id, StockSymbol.of(security.symbol),
                                         security_id=security.id, security_name=security.name)
+    except CatalogConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/watchlist/{subscription_id}/security-link", response_model=WatchlistItemRead)
+def link_watchlist_security(
+    subscription_id: int,
+    payload: WatchlistLink,
+    account: UserAccount = Depends(require_beta_mutation),
+    db: Session = Depends(get_db),
+):
+    try:
+        return SecuritySelectionService(db).link_subscription(
+            account.id, subscription_id, payload.symbol, payload.security_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
     except CatalogConflict as exc:
         raise HTTPException(409, str(exc)) from exc
 

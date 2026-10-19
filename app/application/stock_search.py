@@ -60,7 +60,7 @@ class WatchlistScope:
                 security.id if security else None, subscription.id, tuple(security.aliases) if security else (),
                 bool(security and security.status == "active" and security.symbol == subscription.symbol and
                      self.reader.metadata(country)["state"] == "READY"),
-                "내 관심종목" if security else "종목 연결 확인 필요 — 기존 관심종목을 유지하고 관리자에게 문의하세요",
+                "내 관심종목" if security else "종목 연결 확인 필요 — 관심종목에서 같은 종목을 확인해 연결하세요",
                 security.source_date.isoformat() if security else None))
         return result
 
@@ -122,6 +122,38 @@ class SecuritySelectionService:
         return {"items": [asdict(r) for r in rows[offset:end]], "total": len(rows), "next_cursor": next_cursor,
                 "catalog": [self.reader.metadata(c) for c in ([country] if country else ["KR", "US"])]}
 
+    def link_subscription(self, owner, key, symbol, security_id):
+        """FR-L01..03: preserve the subscription and all historical references."""
+        query = select(WatchlistSubscription).where(
+            WatchlistSubscription.id == key, WatchlistSubscription.owner_id == owner,
+            WatchlistSubscription.ended_at.is_(None), WatchlistSubscription.symbol == symbol)
+        try:
+            if self.db.scalar(query) is None:
+                raise LookupError("선택한 관심종목이 삭제되거나 변경됐습니다.")
+            security = self.reader.require_active(security_id, symbol, lock=True)
+            row = self.db.scalar(query.execution_options(populate_existing=True))
+            if row is None:
+                raise LookupError("선택한 관심종목이 삭제되거나 변경됐습니다.")
+            if security.listed_on > row.created_at.date():
+                raise CatalogConflict("등록 이후 상장된 종목입니다. 코드가 재사용됐을 수 있어 연결할 수 없습니다.")
+            if row.security_id is not None:
+                if row.security_id != security.id:
+                    raise CatalogConflict("이미 다른 종목정보에 연결된 관심종목입니다. 기존 연결을 변경하지 않았습니다.")
+            else:
+                changed = self.db.execute(update(WatchlistSubscription).where(
+                    WatchlistSubscription.id == key, WatchlistSubscription.owner_id == owner,
+                    WatchlistSubscription.symbol == symbol, WatchlistSubscription.ended_at.is_(None),
+                    WatchlistSubscription.security_id.is_(None),
+                ).values(security_id=security.id, security_name=security.name)).rowcount
+                if changed != 1:
+                    raise CatalogConflict("관심종목이 변경됐습니다. 목록을 새로 불러와 확인하세요.")
+            self.db.commit()
+            self.db.refresh(row)
+            return row
+        except Exception:
+            self.db.rollback()
+            raise
+
     def subscription(self, owner, key, symbol, *, lock=False):
         query = select(WatchlistSubscription).where(WatchlistSubscription.owner_id == owner,
             WatchlistSubscription.ended_at.is_(None), WatchlistSubscription.symbol == symbol)
@@ -130,7 +162,7 @@ class SecuritySelectionService:
         if not row:
             raise LookupError("선택한 관심종목이 삭제되거나 변경됐습니다.")
         if not row.security_id:
-            raise CatalogConflict("기존 종목 연결 확인이 필요합니다. 관심종목을 삭제하면 기존 알림 조건이 종료됩니다. 기존 등록을 유지하고 관리자에게 문의하세요.")
+            raise CatalogConflict("기존 종목 연결 확인이 필요합니다. 관심종목에서 같은 종목을 확인해 연결하면 기존 알림 조건을 유지할 수 있습니다.")
         self.reader.require_active(row.security_id, symbol, lock=lock)
         return row
 

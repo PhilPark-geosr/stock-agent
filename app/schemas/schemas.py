@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 
 class OHLCVRecord(BaseModel):
@@ -108,6 +108,28 @@ class WatchlistCreate(BaseModel):
     @field_validator("symbol")
     @classmethod
     def validate_symbol(cls, value: str) -> str:
+        normalized = _normalize_symbol(value)
+        if not normalized:
+            raise ValueError("symbol is required")
+        return normalized
+
+
+class WatchlistLink(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    symbol: str = Field(min_length=1, max_length=24)
+    security_id: str = Field(min_length=1, max_length=36)
+    confirmed: StrictBool
+
+    @field_validator("confirmed")
+    @classmethod
+    def require_confirmation(cls, value):
+        if not value:
+            raise ValueError("같은 종목임을 확인해야 연결할 수 있습니다.")
+        return value
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_symbol(cls, value):
         normalized = _normalize_symbol(value)
         if not normalized:
             raise ValueError("symbol is required")

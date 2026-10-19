@@ -40,6 +40,8 @@ function createWatchlistController({ backend, renderScreen, showToast, showView,
     }
   }
 
+  let saving = false;
+
   function bindWatchlistEvents() {
     const picker = window.StockAgent.createSecurityPicker({ root: document.querySelector("#catalog-security-picker"), backend, scope: "catalog" });
     document.querySelector("#search-form").addEventListener("submit", async (event) => {
@@ -57,21 +59,28 @@ function createWatchlistController({ backend, renderScreen, showToast, showView,
 
     document.querySelector("#add-symbol-form").addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (saving) return;
       const selected = picker.selection();
       if (!selected) {
         showToast("검색 결과에서 등록할 종목을 선택하세요.");
         return;
       }
       const symbol = selected.symbol;
+      const existing = state.stocks.find(stock => stock.symbol === symbol && !stock.security_id);
+      if (existing && !window.confirm(
+        `${existing.symbol} (${existing.name})의 기존 관심종목을 ${selected.name} (${symbol}, ${selected.country})에 연결할까요?\n${selected.note || ""} · 자료 기준 ${selected.source_date || "미상"}\n같은 종목인지 확인하세요. 기존 알림 조건과 과거 브리핑은 유지됩니다.`
+      )) return;
+      saving = true;
       try {
-        await backend.addWatchlist(symbol, selected.security_id);
+        if (existing) await backend.linkWatchlist(existing.id, symbol, selected.security_id);
+        else await backend.addWatchlist(symbol, selected.security_id);
         state.selectedSymbol = symbol;
         picker.clear();
-        showToast(`${symbol}을 관심종목에 추가했습니다.`);
+        showToast(existing ? `${symbol}의 종목정보를 연결했습니다. 기존 조건과 기록을 유지했습니다.` : `${symbol}을 관심종목에 추가했습니다.`);
         await loadWatchlist();
       } catch (error) {
-        showToast(`관심종목 추가 실패: ${errorMessage(error)}`);
-      }
+        showToast(`관심종목 등록·연결 실패: ${errorMessage(error)}`);
+      } finally { saving = false; }
     });
   }
 

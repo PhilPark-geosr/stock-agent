@@ -11,7 +11,7 @@ function WatchlistRow(stock, selectedSymbol, onSelect, onDelete) {
   const symbol = document.createElement("strong");
   symbol.textContent = stock.symbol;
   const name = document.createElement("small");
-  name.textContent = stock.name;
+  name.textContent = stock.security_id ? stock.name : `${stock.name} · 종목 정보 미연결`;
   label.append(symbol, name);
   const alert = document.createElement("span");
   alert.className = "stock-alert";

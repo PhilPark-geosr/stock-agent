@@ -10,10 +10,22 @@ export interface Invitation {
   expires_at: string;
 }
 
+export interface SecurityCandidate {
+  security_id: string;
+  symbol: string;
+  name: string;
+  country: string;
+  note: string;
+  source_date: string | null;
+  selectable: boolean;
+}
+
 export interface WatchlistItem {
   id: number;
   symbol: string;
   created_at: string;
+  security_id?: string | null;
+  security_name?: string | null;
 }
 
 export interface AnalysisHistoryItem {
@@ -58,6 +70,8 @@ export interface WebApi {
   redeem(code: string): Promise<Session>;
   watchlist(): Promise<WatchlistItem[]>;
   addWatchlist(symbol: string): Promise<WatchlistItem>;
+  securityCandidates(symbol: string): Promise<SecurityCandidate[]>;
+  linkWatchlist(id: number, symbol: string, securityId: string): Promise<WatchlistItem>;
   removeWatchlist(symbol: string): Promise<void>;
   analysisHistory(symbol: string, offset?: number): Promise<AnalysisHistoryItem[]>;
   analysisDetail(symbol: string, id: number): Promise<AnalysisResult>;
@@ -245,6 +259,19 @@ export function createApi(options: ApiOptions = {}): WebApi {
         body: JSON.stringify({ symbol }),
       });
       return expectJson<WatchlistItem>(response);
+    },
+
+    async securityCandidates(symbol) {
+      const query = new URLSearchParams({ scope: 'catalog', q: symbol, limit: '100' });
+      const result = await expectJson<{ items: SecurityCandidate[] }>(await request(`/securities/search?${query}`, { credentials: 'same-origin' }));
+      return result.items.filter(item => item.symbol === symbol);
+    },
+
+    async linkWatchlist(id, symbol, securityId) {
+      return expectJson<WatchlistItem>(await request(`/watchlist/${encodeURIComponent(id)}/security-link`, {
+        method: 'POST', credentials: 'same-origin', headers: jsonHeaders,
+        body: JSON.stringify({ symbol, security_id: securityId, confirmed: true }),
+      }));
     },
 
     async removeWatchlist(symbol) {
