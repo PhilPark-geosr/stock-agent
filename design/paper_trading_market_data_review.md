@@ -3,7 +3,7 @@
 - 확인일: 2026-10-26
 - 이슈: [#44](https://github.com/PhilPark-geosr/stock-agent/issues/44)
 - 조사 브랜치: `codex/paper-trading-design`
-- 관련 요구사항: [모의투자 요구사항](paper_trading_requirements.md)의 FR-PT-010·014·015·018·021 및 초안 FR-PT-002·004·005·006·008
+- 관련 문서: [Inception의 범위·핵심 위험](paper_trading_requirements.md), [Elaboration 준비 자료의 상세 요구사항·예외](paper_trading_elaboration_notes.md). 관련 ID: FR-PT-010·014·015·018·021~025 및 초안 FR-PT-002·004·005·006·008
 - 상태: 코드 조사 및 제한된 외부 조회 결과. 공급자·주문 방식·체결 정책 채택 전.
 
 ## 결론
