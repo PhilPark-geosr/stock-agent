@@ -5,6 +5,14 @@ const session = { id: 'operator', login_provider: 'kakao', is_operator: true, ha
 const response = (status: number, body?: unknown) => new Response(body === undefined ? null : JSON.stringify(body), { status });
 
 describe('HTTP boundary', () => {
+  it('posts a test notification with cookies and no caller-selected recipient, without retrying errors', async () => {
+    const request = vi.fn().mockResolvedValueOnce(response(204)).mockResolvedValueOnce(response(502));
+    const api = createApi({ request });
+    await expect(api.sendTestNotification()).resolves.toBeUndefined();
+    expect(request).toHaveBeenCalledWith('/notification-connections/kakao/test', { method: 'POST', credentials: 'same-origin' });
+    await expect(api.sendTestNotification()).rejects.toMatchObject({ status: 502 });
+    expect(request).toHaveBeenCalledTimes(2);
+  });
   it('sends same-origin credentials and surfaces status without leaking server details', async () => {
     const request = vi.fn().mockResolvedValue(response(500, { detail: 'secret internal trace' }));
     const api = createApi({ request });

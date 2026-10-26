@@ -28,6 +28,58 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 브라우저에서 `http://127.0.0.1:8000/login`에 접속합니다. 카카오 콘솔에도 위 콜백 주소를 등록해야 합니다. 기존 `/` 화면과 API는 그대로 유지합니다. 웹을 빌드하지 않았다면 `/login`은 503을 반환합니다.
 
+### Tailscale Serve로 모바일 웹 로그인 시험
+
+#### PC·Android 연결과 HTTPS 설정
+
+1. [Tailscale 다운로드](https://tailscale.com/download)에서 Windows용 앱을 설치하고 로그인합니다. Android 폰에도 Tailscale 앱을 설치하고 같은 계정으로 로그인합니다.
+2. 두 기기에서 Tailscale 연결을 켭니다. Android에서는 VPN 연결 요청을 허용합니다. [관리 콘솔의 기기 목록](https://login.tailscale.com/admin/machines)에서 PC와 폰이 같은 개인 네트워크(tailnet)에 연결되었는지 확인합니다.
+3. [관리 콘솔의 DNS 설정](https://login.tailscale.com/admin/dns)에서 **MagicDNS**를 켜고, **HTTPS Certificates → Enable HTTPS**를 활성화합니다. 인증서 발급 시 기기 도메인이 공개 인증서 기록에 남는다는 안내를 확인합니다. 이 시험에는 일반 인터넷 공개 기능인 Funnel을 사용하지 않습니다.
+4. 앞의 웹 빌드·실행 절차대로 PC의 Python 서버를 실행합니다. PC 브라우저에서 `http://127.0.0.1:8000/health`를 열어 `{"status":"ok"}`를 확인합니다. 서버는 `127.0.0.1:8000`으로 실행한 상태를 유지합니다.
+5. 별도 PowerShell에서 다음을 실행합니다. HTTPS 활성화 안내 URL이 나오면 해당 링크에서 설정을 완료한 뒤 다시 실행합니다.
+
+   ```powershell
+   tailscale status
+   tailscale serve --bg http://127.0.0.1:8000
+   tailscale serve status
+   ```
+
+   `tailscale` 명령을 찾지 못하면 설치 후 PowerShell을 다시 열거나 기본 설치 경로의 실행 파일을 사용합니다. 예: `& 'C:\Program Files\Tailscale\tailscale.exe' serve --bg http://127.0.0.1:8000`.
+
+6. Serve가 출력한 `https://기기이름.tailXXXXXX.ts.net` 주소를 확인합니다. 아래의 `pc-name.tailXXXXXX.ts.net`은 이 실제 도메인으로 바꿉니다. 폰에서 Wi-Fi를 끄고 모바일 데이터를 켠 뒤, Tailscale 연결을 유지한 상태로 해당 주소의 `/health`를 열어 같은 응답을 확인합니다.
+
+`--bg`는 Serve를 백그라운드에서 유지하지만 Python 서버를 대신 실행하지는 않습니다. PC가 켜져 있고 Python 서버와 양쪽 Tailscale 연결이 유지되어야 새 요청을 처리할 수 있습니다. 이 안내의 기본 HTTPS Serve만 중지하려면 `tailscale serve --https=443 off`를 실행합니다.
+
+접속되지 않으면 PC 로컬 `/health` → 두 기기의 Tailscale 연결 → `tailscale serve status`의 대상 주소 → MagicDNS·HTTPS 설정 순서로 확인합니다. tailnet 접근 정책을 별도로 제한했다면 폰에서 PC의 HTTPS 포트(443) 접근을 허용하는지도 확인합니다.
+
+설정 근거: [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve), [Serve 명령](https://tailscale.com/docs/reference/tailscale-cli/serve), [HTTPS 활성화](https://tailscale.com/docs/how-to/set-up-https-certificates).
+
+#### 카카오 로그인 설정과 확인
+
+프로젝트 `.env`의 로그인 설정을 모바일에서 접속할 HTTPS 주소에 맞춥니다.
+
+```env
+WEB_ORIGIN=https://pc-name.tailXXXXXX.ts.net
+KAKAO_REDIRECT_URI=https://pc-name.tailXXXXXX.ts.net/auth/kakao/callback
+WEB_COOKIE_SECURE=true
+```
+
+1. `WEB_ORIGIN`에는 `/login` 같은 경로 없이 HTTPS 출처만 지정합니다. 현재 서버는 하나의 웹 출처를 허용하므로, 이 설정에서는 PC에서도 같은 Serve 주소로 웹을 이용합니다.
+2. 카카오 Developers의 REST API 키 설정에 위 `KAKAO_REDIRECT_URI`와 정확히 같은 로그인 Redirect URI를 추가합니다.
+3. Python 서버를 재시작하고 폰에서 `https://pc-name.tailXXXXXX.ts.net/login`에 접속해 로그인합니다. `.env` 변경만으로 Tailscale Serve를 재시작할 필요는 없습니다.
+
+로그인 중 `403`이 발생하면 응답의 `detail`을 확인합니다. `Untrusted web origin`이면 브라우저 접속 출처와 `WEB_ORIGIN`이 다른 것입니다. Origin 검사를 해제하지 말고 실제 접속 주소와 설정을 맞춥니다. 카카오 화면에 `KOE006`이 표시되면 [공식 에러 안내](https://developers.kakao.com/docs/ko/kakaologin/trouble-shooting)에 따라 등록된 Redirect URI와 요청 주소를 확인합니다.
+
+모바일에서 콜백을 `127.0.0.1`로 두면 PC가 아니라 폰 자신으로 돌아가므로 Serve 주소가 필요합니다. 카카오 알림 연결까지 시험할 때는 `KAKAO_NOTIFICATION_REDIRECT_URI`도 `https://pc-name.tailXXXXXX.ts.net/notification-connections/kakao/callback`으로 설정하고 카카오 콘솔에 별도로 등록합니다.
+
+검증은 모바일 데이터에서 `/health` 도달 확인 → 서비스 로그인 완료 → 저장된 분석 결과 조회 순서로 진행합니다. `/health` 성공만으로 로그인이나 오프라인 보관이 검증되지는 않습니다. 개인 PC·모바일 이용의 합의 사항과 미결정 사항은 [요구사항 문서](design/personal_pc_mobile_requirements.md)를 참고하세요.
+
+#### 테스트 알림 보내기
+
+메시지의 **자세히 보기**는 PC·모바일 모두 `.env`의 `WEB_ORIGIN`에 `/app`을 붙인 주소로 이동합니다. 카카오 Developers의 **앱 → 제품 링크 관리 → 웹 도메인**에도 `WEB_ORIGIN`과 같은 도메인을 등록하세요. 메시지용 웹 도메인 등록은 로그인 Redirect URI 등록과 별도입니다. 설정·코드 변경 후 Python 서버를 재시작하고 새 메시지로 확인합니다. 이미 받은 메시지의 링크는 바뀌지 않습니다. 메시지를 열 때도 폰의 Tailscale 연결과 PC 서버 실행이 필요합니다. [공식 링크 설정 안내](https://developers.kakao.com/docs/ko/message-template/default#link).
+
+카카오 알림 연결 후에는 `/app`의 **카카오 알림 연결** 영역 안에 있는 **테스트 알림 보내기**로 본인의 카카오톡 나와의 채팅에 고정 메시지 한 건을 보낼 수 있습니다. AI 분석이나 조건 평가는 실행하지 않습니다. 성공 표시는 카카오의 발송 접수를 뜻하므로 실제 수신은 카카오톡에서 확인하세요. 전송 결과를 확인하지 못했다면 수신함을 먼저 확인한 뒤 다시 시도하세요. 자동 재시도는 하지 않습니다. 설계와 검증 범위는 [테스트 알림 설계](design/notification_test_design.md)에 있습니다.
+
 ### 첫 운영자 지정과 발급
 
 1. `/login`에서 카카오 로그인합니다. 팝업이 차단되면 허용한 뒤 다시 시도합니다.

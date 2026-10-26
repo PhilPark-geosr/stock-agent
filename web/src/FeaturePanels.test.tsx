@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type WebApi } from './api';
 import { AlertConditionsPanel } from './components/AlertConditionsPanel';
 import { NotificationConnectionPanel } from './components/NotificationConnectionPanel';
+import { TestNotificationButton } from './components/TestNotificationButton';
 import { WatchlistPanel } from './components/WatchlistPanel';
 
 afterEach(() => window.history.replaceState({}, '', '/'));
@@ -60,10 +61,17 @@ describe('reusable beta panels', () => {
     const api = {
       notificationConnection: vi.fn().mockResolvedValue({ connected: true, connection_id: 7 }),
       disconnectNotification: vi.fn().mockResolvedValue(undefined),
+      sendTestNotification: vi.fn().mockResolvedValue(undefined),
     } as unknown as WebApi;
-    render(<NotificationConnectionPanel api={api} onSessionExpired={vi.fn()} />);
+    render(<NotificationConnectionPanel api={api} onSessionExpired={vi.fn()}>
+      <TestNotificationButton api={api} onSessionExpired={vi.fn()} />
+    </NotificationConnectionPanel>);
+    fireEvent.click(await screen.findByRole('button', { name: '테스트 알림 보내기' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('발송을 접수했습니다');
+    expect(api.sendTestNotification).toHaveBeenCalledOnce();
     fireEvent.click(await screen.findByRole('button', { name: '연결 해제' }));
     await waitFor(() => expect(api.disconnectNotification).toHaveBeenCalledTimes(1));
     expect(await screen.findByText('카카오 알림 연결 안 됨')).toBeVisible();
+    expect(screen.queryByRole('button', { name: '테스트 알림 보내기' })).not.toBeInTheDocument();
   });
 });

@@ -68,6 +68,7 @@ export interface WebApi {
   notificationConnection(): Promise<NotificationConnection>;
   authorizeNotification(): Promise<string>;
   disconnectNotification(): Promise<void>;
+  sendTestNotification(): Promise<void>;
 }
 
 export class ApiError extends Error {
@@ -299,6 +300,11 @@ export function createApi(options: ApiOptions = {}): WebApi {
       });
       const result = await expectJson<{ authorization_url: string }>(response);
       return result.authorization_url;
+    },
+
+    async sendTestNotification() {
+      const response = await request('/notification-connections/kakao/test', { method: 'POST', credentials: 'same-origin' });
+      if (!response.ok) throw new ApiError(response.status);
     },
 
     async disconnectNotification() {
