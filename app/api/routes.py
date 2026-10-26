@@ -34,6 +34,7 @@ from app.application.notification_connections import NotificationConnectionError
 from app.domain.symbols import StockSymbol
 from app.application.stock_search import SecuritySelectionService
 from app.repositories.catalog import CatalogConflict, SecurityCatalogReader
+from app.repositories.catalog_operations import CatalogAlertGate
 from app.application.custom_rule_agent import CustomRuleAgentError
 from app.integrations.kakao_auth import (
     KakaoAuthError,
@@ -50,6 +51,7 @@ from app.schemas import (
     CustomAlertConditionCreate,
     CustomAlertConditionRead,
     WatchlistCreate,
+    WatchlistLink,
     WatchlistItemRead,
 )
 from app.services.scheduler import run_scheduled_batch
@@ -302,12 +304,31 @@ def add_watchlist_item(
         raise HTTPException(409, str(exc)) from exc
 
 
+@router.post("/watchlist/{subscription_id}/security-link", response_model=WatchlistItemRead)
+def link_watchlist_security(
+    subscription_id: int,
+    payload: WatchlistLink,
+    account: UserAccount = Depends(require_beta_mutation),
+    db: Session = Depends(get_db),
+):
+    try:
+        return SecuritySelectionService(db).link_subscription(
+            account.id, subscription_id, payload.symbol, payload.security_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except CatalogConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
 @router.get("/watchlist", response_model=list[WatchlistItemRead])
 def list_watchlist_items(
     account: UserAccount = Depends(require_beta_access),
     watchlist_repository: WatchlistRepository = Depends(get_watchlist_repository),
+    db: Session = Depends(get_db),
 ):
-    return watchlist_repository.list(account.id)
+    gate = CatalogAlertGate(db)
+    return [WatchlistItemRead.model_validate(item).model_copy(update={"alert_hold_reason": gate.reason(item.id)})
+            for item in watchlist_repository.list(account.id)]
 
 
 @router.delete("/watchlist/{symbol}", status_code=status.HTTP_204_NO_CONTENT)

@@ -12,6 +12,7 @@ function apiWith(issue: WebApi['issue']): WebApi {
     logout: vi.fn().mockResolvedValue(undefined),
     issue,
     redeem: vi.fn(),
+    securityCandidates: vi.fn().mockResolvedValue([]), linkWatchlist: vi.fn(),
     watchlist: vi.fn(),
     addWatchlist: vi.fn(),
     removeWatchlist: vi.fn(),

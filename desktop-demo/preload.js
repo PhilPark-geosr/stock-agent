@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld("desktop", {
     status: () => ipcRenderer.invoke("backend:status"),
     listWatchlist: () => request("GET", "/watchlist"),
     addWatchlist: (symbol, securityId) => request("POST", "/watchlist", { symbol, security_id: securityId }),
+    linkWatchlist: (id, symbol, securityId) => request("POST", `/watchlist/${encodeURIComponent(id)}/security-link`, { symbol, security_id: securityId, confirmed: true }),
     deleteWatchlist: (symbol) => request("DELETE", `/watchlist/${encodeURIComponent(symbol)}`),
     latestAnalysis: (symbol) => request("GET", `/stocks/${encodeURIComponent(symbol)}/analysis/latest`),
     runAnalysis: (symbol) => request("POST", `/stocks/${encodeURIComponent(symbol)}/analysis`),

@@ -8,6 +8,7 @@ class SystemAlertDispatchResult:
     skipped_no_connection: int = 0
     skipped_duplicate: int = 0
     failed: int = 0
+    skipped_catalog: int = 0
 
 
 class SystemAlertDispatcher:
@@ -18,11 +19,13 @@ class SystemAlertDispatcher:
         connection_repository,
         delivery_repository,
         sender,
+        catalog_gate=None,
     ) -> None:
         self.watchlists = watchlist_repository
         self.connections = connection_repository
         self.deliveries = delivery_repository
         self.sender = sender
+        self.catalog_gate = catalog_gate
 
     def dispatch(self, analysis) -> SystemAlertDispatchResult:
         if not analysis.should_alert or not (analysis.alert_reason or "").strip():
@@ -33,9 +36,13 @@ class SystemAlertDispatcher:
         no_connection = 0
         duplicate = 0
         failed = 0
+        skipped_catalog = 0
 
         subscriptions = self.watchlists.list_active_for_symbol(analysis.symbol)
         for subscription in subscriptions:
+            if self.catalog_gate and not self.catalog_gate.allowed(subscription.id):
+                skipped_catalog += 1
+                continue
             eligible += 1
             connection = self.connections.get_active(
                 owner_id=subscription.owner_id,
@@ -55,6 +62,10 @@ class SystemAlertDispatcher:
                 duplicate += 1
                 continue
 
+            if self.catalog_gate and not self.catalog_gate.allowed(subscription.id):
+                self.deliveries.mark_failed(reservation.delivery.id, reason="catalog_hold")
+                skipped_catalog += 1
+                continue
             try:
                 self.sender.send(
                     connection=connection,
@@ -76,6 +87,7 @@ class SystemAlertDispatcher:
             skipped_no_connection=no_connection,
             skipped_duplicate=duplicate,
             failed=failed,
+            skipped_catalog=skipped_catalog,
         )
 
 

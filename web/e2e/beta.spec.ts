@@ -106,6 +106,25 @@ test('invited member redeems once and uses stored analysis without live services
   await expect(memberPage.locator('.analysis-detail')).toContainText('브라우저 테스트용 이전 공용 분석입니다.')
   await memberPage.getByRole('button', { name: '최신 분석 보기' }).click()
   await expect(memberPage.locator('.analysis-detail')).toContainText('브라우저 테스트용 최근 공용 분석입니다.')
+  // Simulate an existing pre-catalog subscription in the isolated test DB.
+  const original = (await (await memberPage.request.get('/watchlist')).json())[0]
+  execFileSync(process.env.E2E_PYTHON!, ['-c', `
+import sqlite3, sys
+with sqlite3.connect(sys.argv[1]) as db:
+    db.execute("UPDATE watchlist_items SET security_id=NULL, security_name=NULL WHERE id=? AND user_account_id=?", (int(sys.argv[2]), 'browser-test-member'))
+`, process.env.STOCK_AGENT_E2E_DATABASE!, String(original.id)])
+  await memberPage.reload()
+  await memberPage.getByRole('button', { name: 'AAPL 종목 정보 연결' }).click()
+  const connection = memberPage.getByRole('region', { name: 'AAPL 기존 관심종목 연결' })
+  await expect(connection.getByRole('radio')).toBeVisible()
+  await expect(connection.getByRole('button', { name: '같은 종목임을 확인하고 연결' })).toBeDisabled()
+  await connection.getByRole('radio').check()
+  await memberPage.screenshot({ path: testInfo.outputPath('legacy-security-link-mobile.png'), fullPage: true })
+  await connection.getByRole('button', { name: '같은 종목임을 확인하고 연결' }).click()
+  await expect(connection).toBeHidden()
+  const linked = (await (await memberPage.request.get('/watchlist')).json())[0]
+  expect(linked).toMatchObject({ id: original.id, symbol: original.symbol, created_at: original.created_at, security_id: 'test-AAPL' })
+
   await memberPage.screenshot({ path: testInfo.outputPath('member-analysis-detail.png'), fullPage: true })
 
   const conditions: Array<{ id: number; symbol: string; name: string; user_rule: string; validation_summary: string; enabled: boolean }> = []

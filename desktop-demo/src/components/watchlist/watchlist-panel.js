@@ -11,7 +11,8 @@ function WatchlistPanel() {
       <div id="watchlist" class="watchlist"></div>
       <form id="add-symbol-form" class="add-symbol-form">
         <div id="catalog-security-picker"></div>
-        <button type="submit">관심종목 추가</button>
+        <p>미연결 관심종목은 위 검색에서 같은 종목을 선택해 연결하세요. 기존 조건과 기록을 유지합니다.</p>
+        <button type="submit">관심종목 등록 · 연결</button>
       </form>
     </aside>`;
 }

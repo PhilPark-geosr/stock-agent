@@ -44,7 +44,9 @@ class WatchlistRepository(WatchlistRepositoryInterface):
         if existing is not None:
             if security_id and existing.security_id != security_id:
                 from app.repositories.catalog import CatalogConflict
-                raise CatalogConflict("같은 코드의 기존 등록이 있습니다. 기존 관심종목 삭제 후 다시 선택하세요.")
+                if existing.security_id is None:
+                    raise CatalogConflict("기존 관심종목의 종목 정보 연결에서 같은 종목임을 확인하세요. 기존 알림 조건과 기록을 유지할 수 있습니다.")
+                raise CatalogConflict("같은 코드의 기존 등록과 종목 연결이 다릅니다. 기존 등록을 유지하고 관리자에게 문의하세요. 삭제하면 기존 알림 조건이 종료됩니다.")
             return existing
 
         item = WatchlistSubscription(owner_id=owner_id, symbol=symbol.value,

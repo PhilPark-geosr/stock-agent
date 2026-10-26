@@ -9,6 +9,7 @@ const msftHistory: AnalysisHistoryItem[] = [{ id: 1, symbol: 'MSFT', analyzed_at
 function apiWith(history: WebApi['analysisHistory']): WebApi {
   return {
     session: vi.fn(), login: vi.fn(), logout: vi.fn(), issue: vi.fn(), redeem: vi.fn(),
+    securityCandidates: vi.fn().mockResolvedValue([]), linkWatchlist: vi.fn(),
     watchlist: vi.fn().mockResolvedValue([{ id: 1, symbol: 'MSFT', created_at: '' }, { id: 2, symbol: 'AAPL', created_at: '' }]),
     addWatchlist: vi.fn(), removeWatchlist: vi.fn(), analysisHistory: history, analysisDetail: vi.fn(),
     runAnalysis: vi.fn(), alertConditions: vi.fn().mockResolvedValue([]), addAlertCondition: vi.fn(),

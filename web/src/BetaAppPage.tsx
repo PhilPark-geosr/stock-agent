@@ -1,3 +1,4 @@
+import { SecurityLinkPanel } from './components/SecurityLinkPanel';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, type AnalysisHistoryItem, type AnalysisResult, type Session, type WatchlistItem, type WebApi } from './api';
 import { WatchlistPanel } from './components/WatchlistPanel';
@@ -185,9 +186,12 @@ export function BetaAppPage({ api, session, onLogout, onSessionExpired }: Props)
       <p className="lead">관심 종목의 공통 분석과 알림 조건을 확인하세요.</p></div>
       <div className="account-card"><span>내 계정</span><strong>{session.id}</strong><button className="text-button" type="button" onClick={onLogout}>로그아웃</button></div></section>
     <nav className="beta-nav" aria-label="서비스 화면"><a href="#watchlist-area">관심 종목</a><a href="#analysis-area">공통 분석</a><a href="#history-area">분석 이력</a><a href="#conditions-area">알림 조건</a><a href="#notification-area">카카오 알림</a></nav>
-    {message && <p className={message.includes('저장되었습니다') ? 'notice' : 'notice error'} role={message.includes('저장되었습니다') ? 'status' : 'alert'}>{message}</p>}
+    {message && <p className={/저장되었습니다|연결되었습니다/.test(message) ? 'notice' : 'notice error'} role={/저장되었습니다|연결되었습니다/.test(message) ? 'status' : 'alert'}>{message}</p>}
     {historyWarning && <p className="notice error" role="alert">{historyWarning}</p>}
-    <div id="watchlist-area"><WatchlistPanel items={items} selectedSymbol={selectedSymbol} loading={loading} adding={adding} removing={removing} onAdd={addWatchlist} onSelect={chooseSymbol} onRemove={removeWatchlist} /></div>
+    <div id="watchlist-area"><WatchlistPanel items={items} selectedSymbol={selectedSymbol} loading={loading} adding={adding} removing={removing} onAdd={addWatchlist} onSelect={chooseSymbol} onRemove={removeWatchlist} renderLink={item => <SecurityLinkPanel item={item} api={api} onSessionExpired={onSessionExpired} onLinked={linked => {
+      setItems(current => current.map(row => row.id === linked.id ? linked : row));
+      setMessage('종목 정보가 연결되었습니다. 기존 알림 조건과 과거 브리핑은 유지됩니다.');
+    }} />} /></div>
     <div id="analysis-area"><AnalysisPanel symbol={selectedSymbol} detail={detail} latestId={history[0]?.id ?? null} loading={historyLoading || detailLoading !== null} running={running} onRun={runAnalysis} /></div>
     <div id="history-area"><AnalysisHistoryPanel symbol={selectedSymbol} items={history} selectedId={detail?.id ?? null} loading={historyLoading} detailLoading={detailLoading} hasMore={hasMoreHistory} onSelect={showDetail} onLatest={() => { if (history[0]) showDetail(history[0]); }} onMore={loadMoreHistory} /></div>
     <div id="conditions-area"><AlertConditionsPanel key={conditionRevision} api={api} selectedSymbol={selectedSymbol} onSessionExpired={onSessionExpired} /></div>

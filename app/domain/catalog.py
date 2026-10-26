@@ -95,6 +95,7 @@ class CatalogAttemptRecord(Base):
     status: Mapped[str] = mapped_column(String(20))
     error: Mapped[str | None] = mapped_column(String(100), nullable=True)
     version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class BriefingSubjectRecord(Base):
@@ -105,3 +106,15 @@ class BriefingSubjectRecord(Base):
     security_id: Mapped[str | None] = mapped_column(ForeignKey("securities.id"), nullable=True, index=True)
     symbol: Mapped[str] = mapped_column(String(24))
     name: Mapped[str] = mapped_column(String(255))
+
+
+class CatalogDelistingRecord(Base):
+    __tablename__ = "catalog_delisting_evidence"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    security_id: Mapped[str] = mapped_column(ForeignKey("securities.id"), index=True)
+    effective_on: Mapped[date] = mapped_column(Date)
+    source_url: Mapped[str] = mapped_column(String(1000))
+    reviewed_by: Mapped[str] = mapped_column(String(120))
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revocation_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)

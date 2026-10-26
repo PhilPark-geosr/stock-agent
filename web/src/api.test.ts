@@ -166,3 +166,12 @@ describe('browser login', () => {
     expect(popup.close).toHaveBeenCalledTimes(1);
   });
 });
+
+
+it('links the exact legacy subscription only with explicit confirmation and cookie credentials', async () => {
+  const request = vi.fn().mockResolvedValue(response(200, { id: 7, symbol: 'MSFT', security_id: 'security' }));
+  await createApi({ request }).linkWatchlist(7, 'MSFT', 'security');
+  expect(request).toHaveBeenCalledWith('/watchlist/7/security-link', expect.objectContaining({
+    method: 'POST', credentials: 'same-origin', body: JSON.stringify({ symbol: 'MSFT', security_id: 'security', confirmed: true }),
+  }));
+});

@@ -17,6 +17,7 @@ function apiWith(overrides: Partial<WebApi> = {}): WebApi {
     logout: vi.fn().mockResolvedValue(undefined),
     issue: vi.fn(),
     redeem: vi.fn().mockResolvedValue(betaMember),
+    securityCandidates: vi.fn().mockResolvedValue([]), linkWatchlist: vi.fn(),
     watchlist: vi.fn().mockResolvedValue([]),
     addWatchlist: vi.fn().mockResolvedValue(watchlist[0]),
     removeWatchlist: vi.fn().mockResolvedValue(undefined),
