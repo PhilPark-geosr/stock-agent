@@ -24,7 +24,8 @@ class WatchlistRepository(Protocol):
     def get(self, owner_id: str, symbol: StockSymbol) -> WatchlistSubscription | None:
         ...
 
-    def add(self, owner_id: str, symbol: StockSymbol) -> WatchlistSubscription:
+    def add(self, owner_id: str, symbol: StockSymbol, *, security_id: str | None = None,
+            security_name: str | None = None) -> WatchlistSubscription:
         ...
 
     def delete(self, owner_id: str, symbol: StockSymbol) -> bool:
@@ -51,6 +52,7 @@ class AlertConditionRepository(Protocol):
         symbol: str,
         user_rule: str,
         validation: RuleValidationResult,
+        subscription_id: int | None = None,
     ) -> CustomAlertConditionRecord:
         ...
 

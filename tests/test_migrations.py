@@ -37,7 +37,7 @@ def test_known_legacy_database_is_stamped_without_losing_rows(tmp_path: Path) ->
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT symbol FROM watchlist_items WHERE id=1")) == "AAPL"
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0011_merge_beta_briefing"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0012_merge_catalog_beta"
         columns = {column["name"] for column in inspect(engine).get_columns("watchlist_items")}
         assert {"user_account_id", "ended_at"} <= columns
         condition_columns = {
@@ -62,10 +62,37 @@ def test_unknown_existing_schema_is_not_auto_stamped(tmp_path: Path) -> None:
         migrate_database(url)
 
 
+def test_catalog_migration_indexes_historical_targets_without_rewriting_snapshots(tmp_path):
+    from alembic import command
+    from app.core.migrations import _config
+    import sqlalchemy as sa
+    from datetime import datetime
+    url = _url(tmp_path / "subjects.db")
+    command.upgrade(_config(url), "0010_briefing_targets")
+    engine = create_engine(url)
+    metadata = sa.MetaData()
+    runs = sa.Table("briefing_runs", metadata, autoload_with=engine)
+    context = {"symbols": ["OLD", "NEW"], "n": 20}
+    original = {"summary": "NOT_A_TARGET is only mentioned"}
+    with engine.begin() as connection:
+        connection.execute(runs.insert().values(id="old-run", owner_id="owner", request_key="old", request_data={},
+            market="US", purpose="post_market", trade_date="2020-01-01", context=context, result=original,
+            prompt_id="old", status="completed", created_at=datetime(2020, 1, 1)))
+    migrate_database(url)
+    migrate_database(url)
+    with engine.connect() as connection:
+        rows = connection.execute(text("SELECT symbol,security_id FROM briefing_subjects")).all()
+        assert sorted(rows) == [("NEW", None), ("OLD", None)]
+        old = connection.execute(sa.select(runs)).first()
+        assert old.context == context and old.result == original
+
+
 @pytest.mark.parametrize("previous_revision", [
     "0008_user_alert_evaluation",
     "0010_beta_access_grants",
     "0010_briefing_targets",
+    "0011_merge_beta_briefing",
+    "0011_security_catalog",
 ])
 def test_previous_head_preserves_all_existing_rows(tmp_path: Path, previous_revision: str) -> None:
     from alembic import command
@@ -93,7 +120,7 @@ def test_previous_head_preserves_all_existing_rows(tmp_path: Path, previous_revi
     with engine.connect() as connection:
         for name, rows in before.items():
             assert connection.execute(text(f'SELECT * FROM {name}')).all() == rows
-        assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '0011_merge_beta_briefing'
+        assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '0012_merge_catalog_beta'
     assert 'invitations' in inspect(engine).get_table_names()
     assert 'user_beta_access_grants' in inspect(engine).get_table_names()
     assert 'briefing_runs' in inspect(engine).get_table_names()

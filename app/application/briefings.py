@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.domain.briefing_records import PromptVersionRecord
-from app.domain.briefings import BriefingConflict, BriefingContext, EvidenceSnapshot, LostClaim
+from app.domain.briefings import BriefingConflict, BriefingContext, BriefingError, EvidenceSnapshot, LostClaim, retryable_symbols
 
 
 class BriefingCoordinator:
@@ -12,12 +12,29 @@ class BriefingCoordinator:
     def generate(self, owner, request, *, scheduled_key=None):
         key = scheduled_key or f"manual:{request.request_id}"
         request_data = request.model_dump(mode="json")
+        if not request.retry_failed:
+            request_data.pop("retry_failed")  # Preserve request fingerprints created before this option.
         existing = self.history.by_request(owner, key)
         if existing:
             if existing.request_data != request_data:
                 raise BriefingConflict("같은 요청 번호에 다른 분석 조건을 사용할 수 없습니다.")
             return existing
-        context = self.context_source.build(owner, request, self.clock())
+        effective = request
+        if request.retry_failed:
+            if not request.original_id:
+                raise BriefingError("실패 종목 재시도에는 원본 브리핑이 필요합니다.")
+            original = self.history.get(owner, request.original_id)
+            targets = retryable_symbols(status=original.status, symbols=original.context["symbols"],
+                snapshot=original.snapshot, result=original.result)
+            if not targets:
+                raise BriefingConflict("재시도할 실패·자료 부족 종목이 없습니다.")
+            if request.market != original.market or request.purpose != original.purpose or (
+                request.n is not None and request.n != original.context["n"]):
+                raise BriefingConflict("실패 종목 재시도는 원본의 시장·목적·관찰기간을 유지해야 합니다.")
+            if request.symbols is not None and not set(request.symbols) <= set(targets):
+                raise BriefingConflict("원본에서 실패하거나 자료가 부족한 종목만 재시도할 수 있습니다.")
+            effective = request.model_copy(update={"symbols": request.symbols or targets, "n": original.context["n"]})
+        context = self.context_source.build(owner, effective, self.clock())
         prompt = self.prompts.active()
         previous = self.history.previous(owner, context)
         if request.original_id:

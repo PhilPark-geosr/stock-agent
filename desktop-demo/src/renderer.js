@@ -84,7 +84,6 @@ async function initializeApplication(account) {
     document.querySelector("#backend-detail").textContent = connection.baseUrl;
     await Promise.all([watchlistController.loadWatchlist(), alertsController.loadAlertConditions()]);
     await notificationController.refresh();
-    document.querySelector("#alert-symbol-input").value = state.selectedSymbol || "";
   } catch (error) {
     document.querySelector("#backend-connection").textContent = "BACKEND 연결 실패";
     document.querySelector("#backend-detail").textContent = errorMessage(error);

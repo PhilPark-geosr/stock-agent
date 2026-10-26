@@ -211,7 +211,8 @@ def test_same_account_concurrent_codes_consume_only_one_invitation(tmp_path):
 
 
 @pytest.fixture
-def beta_web_client(db_session, monkeypatch, tmp_path):
+def beta_web_client(db_session, monkeypatch, tmp_path, catalog_data):
+    monkeypatch.setattr("app.main.init_db", lambda: None)
     monkeypatch.setenv("WEB_ORIGIN", ORIGIN)
     monkeypatch.setenv("WEB_COOKIE_SECURE", "false")
     (tmp_path / "index.html").write_text("<div id='root'></div>", encoding="utf-8")
@@ -318,12 +319,14 @@ def test_service_routes_accept_cookie_but_require_beta_and_origin_on_mutation(
     account = _account(db_session, "member")
     _login(beta_web_client, db_session, account)
     assert beta_web_client.get("/watchlist").status_code == 403
+    assert beta_web_client.get("/securities/search?scope=catalog").status_code == 403
     issued = _issue(db_session, now=datetime.now(timezone.utc))
     beta_web_client.post(
         "/auth/web/invitations/redeem", json={"code": issued.code}, headers={"Origin": ORIGIN}
     )
 
     assert beta_web_client.get("/watchlist").status_code == 200
+    assert beta_web_client.get("/securities/search?scope=catalog").status_code == 200
     assert beta_web_client.post("/watchlist", json={"symbol": "AAPL"}).status_code == 403
     assert beta_web_client.post(
         "/watchlist", json={"symbol": "AAPL"}, headers={"Origin": ORIGIN}

@@ -2,6 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 import os
 from sqlalchemy.orm import Session
+from sqlalchemy import select
+from datetime import date
+from app.domain.briefing_records import BriefingRunRecord
 
 from app.api.deps import get_current_account
 from app.core.briefings import build_briefing_coordinator
@@ -73,7 +76,20 @@ def generate(body: BriefingRequest, account=Depends(get_current_account), servic
 
 @router.get("")
 def history(limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0),
+            subject: str | None = Query(None, max_length=80),
+            date_from: date | None = None, date_to: date | None = None,
             account=Depends(get_current_account), service=Depends(get_briefings)):
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(422, "시작일은 종료일보다 늦을 수 없습니다.")
+    if subject or date_from or date_to:
+        from app.application.stock_search import briefing_subject_query
+        query = (briefing_subject_query(service.history.db, account.id, subject) if subject else
+                 select(BriefingRunRecord).where(BriefingRunRecord.owner_id == account.id).order_by(
+                     BriefingRunRecord.created_at.desc(), BriefingRunRecord.id.desc()))
+        if date_from: query = query.where(BriefingRunRecord.trade_date >= date_from.isoformat())
+        if date_to: query = query.where(BriefingRunRecord.trade_date <= date_to.isoformat())
+        rows = service.history.db.scalars(query.limit(limit).offset(offset))
+        return [service.history.payload(r, detail=False) for r in rows]
     return [service.history.payload(r, detail=False) for r in service.history.list(account.id, limit, offset)]
 
 

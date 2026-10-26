@@ -2,7 +2,7 @@ import json
 
 from pydantic import ValidationError
 
-from app.domain.briefings import BriefingError, BriefingItem, BriefingResult, ModelOutputError
+from app.domain.briefings import BriefingError, BriefingItem, BriefingResult, ModelOutputError, utc
 
 
 class BriefingAnalyzer:
@@ -59,6 +59,15 @@ class BriefingAnalyzer:
                     item.limitations.append(f"{source.source}: {source.detail or source.status}")
         by_symbol = {i.symbol: i for i in result.items}
         result.items = [by_symbol.get(s) or self.unavailable(s) for s in context.symbols]
+        # Rank validated comparisons, never the model's claimed change or an invented confidence score.
+        levels = {"매도": -1, "보류": 0, "매수": 1}
+        facts = {e.id: e for e in snapshot.evidence}
+        def priority(item):
+            changed = item.comparison == "변경"
+            distance = abs(levels[item.verdict] - levels[old_items[item.symbol]["verdict"]]) if changed else 0
+            newest = max((utc(facts[k].published_at).timestamp() for k in item.evidence_ids), default=0)
+            return (not changed, -distance, -newest, item.symbol)
+        result.items.sort(key=priority)
         return result
 
     @staticmethod

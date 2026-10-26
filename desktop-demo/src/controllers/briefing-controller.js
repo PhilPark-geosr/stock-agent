@@ -9,7 +9,14 @@ function createBriefingController({ backend }) {
   let generationRequest = null, currentRun = null, originalId = null;
   let options = null, saved = null, loadedMarket = null, loadVersion = 0, detailVersion = 0;
   let selected = new Set();
+  let historySubject = "", historyVersion = 0;
+  let historyDates = {};
+  const historyPickerRoot = el("[data-briefing-security-picker]");
+  if (historyPickerRoot) window.StockAgent.createSecurityPicker({ root: historyPickerRoot, backend, scope: "briefings", onSelect: (row) => {
+    historySubject = row?.key || ""; ++historyVersion; refresh().catch(message);
+  } });
   const retryRequests = new Map();
+  const failedRetryRequests = new Map();
   const uuid = () => crypto.randomUUID();
   const text = (selector, value) => { el(selector).textContent = value; };
   const notify = (value) => { status.textContent = value; status.dataset.tone = "info"; };
@@ -75,10 +82,12 @@ function createBriefingController({ backend }) {
     finally { if (version === loadVersion) { loading = false; update(); } }
   }
   async function refresh(append = false) {
-    if (loadingHistory) return;
+    if (append && loadingHistory) return;
+    const version = ++historyVersion, subject = historySubject;
     loadingHistory = true;
     try {
-      const runs = await backend.listBriefings(append ? offset : 0);
+      const runs = await backend.listBriefings(append ? offset : 0, subject, historyDates);
+      if (version !== historyVersion) return;
       if (!append) { history.replaceChildren(); offset = 0; }
       runs.forEach((run) => {
         const button = document.createElement("button");
@@ -88,8 +97,8 @@ function createBriefingController({ backend }) {
         button.addEventListener("click", () => select(run.id).catch(message)); history.append(button);
       });
       offset += runs.length; more.hidden = runs.length < 30;
-      if (!offset) history.textContent = "아직 브리핑이 없습니다. 위에서 종목을 선택해 첫 브리핑을 만들어보세요.";
-    } finally { loadingHistory = false; }
+      if (!offset) history.textContent = subject ? "선택한 종목의 저장된 브리핑이 없습니다." : "아직 저장된 브리핑이 없습니다.";
+    } finally { if (version === historyVersion) loadingHistory = false; }
   }
   async function select(id) {
     const version = ++detailVersion, run = await backend.briefingById(id);
@@ -104,6 +113,24 @@ function createBriefingController({ backend }) {
       try {
         await backend.redeliverBriefing(id, { request_id: retryRequests.get(id), acknowledge_unknown: unknown });
         retryRequests.delete(id); await select(id);
+      } catch (error) { message(error); } finally { setBusy(false); }
+    });
+    for (const [selector, related] of [["[data-previous-briefing]", run.previous], ["[data-original-briefing]", run.original]]) {
+      detail.querySelector(selector)?.addEventListener("click", () => select(related.id).catch(message));
+    }
+    detail.querySelector("[data-retry-failed]")?.addEventListener("click", async () => {
+      if (busy || !run.retryable_symbols?.length) return;
+      setBusy(true);
+      if (!failedRetryRequests.has(id)) failedRetryRequests.set(id, uuid());
+      notify("실패·자료 부족 종목만 현재 시점의 자료로 다시 분석하고 있습니다.");
+      try {
+        const retried = await backend.generateBriefing({ request_id: failedRetryRequests.get(id),
+          market: run.market, purpose: run.purpose, n: run.context.n,
+          symbols: run.retryable_symbols, original_id: id, retry_failed: true });
+        await refresh(); await select(retried.id);
+        if (retried.status !== "preparing") failedRetryRequests.delete(id);
+        notify(retried.failure_reason || (retried.status === "preparing" ? "아직 재시도 중입니다. 목록에서 진행 상태를 확인하세요."
+          : "재시도 결과를 확인하세요. 기존 성공 종목은 원본 결과에서 볼 수 있습니다."));
       } catch (error) { message(error); } finally { setBusy(false); }
     });
     detail.querySelector("[data-reanalyze]")?.addEventListener("click", async () => {
@@ -167,6 +194,10 @@ function createBriefingController({ backend }) {
     try { await Promise.all([loadMarket(true), refresh()]); if (currentRun) await select(currentRun.id); } catch (error) { message(error); }
   });
   more.addEventListener("click", () => refresh(true).catch(message));
+  el("[data-history-dates]")?.addEventListener("click", () => {
+    historyDates = { from: el("[data-history-from]").value, to: el("[data-history-to]").value };
+    refresh().catch(message);
+  });
   const onView = (event) => {
     if (!root.isConnected) { document.removeEventListener("stock-agent:view", onView); return; }
     if (event.detail === "briefing-view") loadMarket(true);

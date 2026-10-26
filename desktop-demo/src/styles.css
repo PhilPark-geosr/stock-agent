@@ -373,3 +373,14 @@ h1 { margin: 0; font-size: 27px; letter-spacing: -.6px; }
 .briefing-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 @media (max-width: 1200px) { .briefing-builder { grid-template-columns: 1fr; } .briefing-targets { min-height: 100px; } }
 @media (max-width: 950px) { .briefing-layout { grid-template-columns: 1fr; } .briefing-heading, .briefing-review { flex-direction: column; } }
+/* One accessible picker shared by registration, alert targets and stored briefings. */
+.security-picker { display: grid; gap: 12px; width: 100%; padding: 16px 0; }
+.security-picker label { display: grid; gap: 6px; }
+.security-picker input, .security-picker select { min-height: 40px; max-width: 100%; }
+.security-picker-options { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.security-results { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; }
+.security-results button { text-align: left; white-space: pre-line; padding: 12px; }
+.security-results button[aria-pressed="true"] { outline: 2px solid #658eff; }
+.security-results button:disabled { opacity: .6; }
+.add-symbol-form, .alert-condition-form { flex-wrap: wrap; }
+#catalog-security-picker, #watchlist-security-picker { flex-basis: 100%; width: 100%; }

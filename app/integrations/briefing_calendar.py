@@ -24,7 +24,8 @@ class BriefingContextSource:
         n = request.n or settings.n
         if not n:
             raise BriefingError("차트 관찰기간 n을 지정하거나 제공 설정에 저장하세요.")
-        symbols = [r.symbol for r in self.watchlist.list(owner) if market_for_symbol(r.symbol) == request.market]
+        subscriptions = self.watchlist.list(owner)
+        symbols = [r.symbol for r in subscriptions if market_for_symbol(r.symbol) == request.market]
         if request.symbols is not None:
             if set(request.symbols) - set(symbols):
                 raise BriefingError("선택한 종목이 현재 시장의 관심종목에 없습니다. 목록을 새로고침한 뒤 다시 선택하세요.")
@@ -53,7 +54,9 @@ class BriefingContextSource:
         sessions = [s.date() for s in cal.sessions[end_idx - n + 1:end_idx + 1]]
         return BriefingContext(market=request.market, purpose=request.purpose, trade_date=today,
             previous_trade_date=previous.date(), cutoff_at=now, started_at=now, n=n,
-            sessions=sessions, symbols=symbols)
+            sessions=sessions, symbols=symbols,
+            security_refs={r.symbol: {"id": r.security_id, "name": r.security_name or r.symbol}
+                           for r in subscriptions if r.symbol in symbols and getattr(r, "security_id", None)})
 
     def options(self, owner, market, now):
         """Readiness for the UI uses the same clock/calendar policy as generation."""
