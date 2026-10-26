@@ -5,6 +5,7 @@
 - 이슈: [#44](https://github.com/PhilPark-geosr/stock-agent/issues/44)
 - 브랜치: `codex/paper-trading-design`
 - 상세 정책: [Elaboration 준비 자료](paper_trading_elaboration_notes.md)
+- 초기 개념·관계: [모의투자 도메인 모델](paper_trading_domain_model.md)
 - 근거 자료: [TradingView 참고 분석](tradingview_paper_trading_reference.md), [가격 데이터 재사용 검토](paper_trading_market_data_review.md)
 
 ## 1. 해결하려는 문제와 사용자 가치
