@@ -34,6 +34,14 @@ export interface ChartBasis {
   session_date: string | null;
   source_timezone: string | null;
   finality: 'unknown';
+  collection_started_at?: string | null;
+  collected_at?: string | null;
+  exchange?: string | null;
+  session_open_at?: string | null;
+  session_close_at?: string | null;
+  calendar_source?: string | null;
+  collection_phase?: 'during_session' | 'after_session' | 'boundary' | 'unknown';
+  phase_reason?: string | null;
 }
 
 export interface AnalysisResult extends AnalysisHistoryItem {

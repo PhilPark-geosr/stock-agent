@@ -139,6 +139,13 @@ if __name__ == "__main__":
                 raw_result={"_chart_basis_v1": {
                     "interval": "1d", "session_date": "2026-09-25",
                     "source_timezone": "America/New_York", "finality": "unknown",
+                    "collection_phase": "after_session", "exchange": "XNAS",
+                    "collection_started_at": "2026-09-27T11:54:58Z",
+                    "collected_at": "2026-09-27T11:55:00Z",
+                    "session_open_at": "2026-09-25T13:30:00Z",
+                    "session_close_at": "2026-09-25T20:00:00Z",
+                    "calendar_source": "browser-fixture/v1",
+                    "phase_reason": "request_started_after_close",
                 }},
                 shared_safe=True,
             ),

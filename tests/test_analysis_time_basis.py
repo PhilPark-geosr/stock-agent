@@ -48,7 +48,10 @@ def test_unproven_daily_date_is_not_inferred(monkeypatch, zone, interval):
 
 def test_recorded_basis_survives_new_analysis_and_all_read_endpoints(client, market_data, agent, db_session):
     market_data.snapshot = market_data.snapshot.model_copy(update={
-        "chart_basis": ChartBasis(interval="1d", session_date=date(2026, 11, 6), source_timezone="Asia/Seoul"),
+        "chart_basis": ChartBasis(interval="1d", session_date=date(2026, 11, 6), source_timezone="Asia/Seoul",
+            collection_phase="during_session", collection_started_at=datetime(2026, 11, 6, 6, 0, tzinfo=timezone.utc),
+            collected_at=datetime(2026, 11, 6, 6, 1, tzinfo=timezone.utc),
+            session_close_at=datetime(2026, 11, 6, 6, 30, tzinfo=timezone.utc), calendar_source="test-calendar/v1"),
     })
     # A model-generated price/time must not override the actual input basis.
     agent.result = agent.analyze(market_data.snapshot).model_copy(update={
@@ -71,11 +74,15 @@ def test_recorded_basis_survives_new_analysis_and_all_read_endpoints(client, mar
     db_session.expire_all()
     detail = client.get(f"/stocks/005930.KS/analysis/{first['id']}").json()
     assert detail == first
+    assert detail["chart_basis"]["collection_phase"] == "during_session"
+    assert detail["chart_basis"]["collected_at"] == "2026-11-06T06:01:00Z"
+    assert detail["chart_basis"]["calendar_source"] == "test-calendar/v1"
     latest = client.get("/stocks/005930.KS/analysis/latest").json()
     assert latest["id"] == second["id"]
     history = client.get("/stocks/005930.KS/analysis").json()
     assert [row["chart_basis"]["session_date"] for row in history] == ["2026-11-09", "2026-11-06"]
     assert history[1]["analyzed_at"] == first["analyzed_at"]
+    assert history[1]["chart_basis"] == first["chart_basis"]
     assert len(market_data.calls) == 2  # historical reads do not fetch new prices
 
 

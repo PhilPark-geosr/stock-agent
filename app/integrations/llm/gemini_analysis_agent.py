@@ -105,6 +105,8 @@ SYSTEM_PROMPT = """
 반드시 요청된 JSON 구조만 반환한다.
 
 제공된 OHLCV 데이터와 지표만 근거로 사용한다.
+chart_basis의 collection_phase는 해당 가격을 수집할 때의 정규장 일정 기준 상태다. during_session은 장중, after_session은 정규장 종료 후 수집, boundary는 장 마감 경계이며 unknown은 근거 부족이다.
+after_session도 공급자의 마감 가격 반영을 보장하지 않는다. finality가 unknown이면 확정 종가나 실시간 현재가로 표현하지 않고, 분석 기록 시각으로 당시 수집 상태를 바꾸지 않는다.
 분석은 투자 조언이 아니라 정보 제공용이다.
 하나 이상의 알림 조건이 명확히 충족될 때만 alert_triggered를 true로 설정한다.
 summary, key_reasons, risk_factors, alert_reason은 개인 투자자가 이해하기 쉬운 한국어로 간결하게 작성한다.

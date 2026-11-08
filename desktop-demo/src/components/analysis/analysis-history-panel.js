@@ -26,7 +26,7 @@ function renderHistory(stock, selectedAnalysisId, onSelect) {
     time.textContent = analysis.time;
     const basis = document.createElement("small");
     basis.style.display = "block";
-    basis.textContent = window.StockAgent.basisLabel(analysis.chartBasis);
+    basis.textContent = `${window.StockAgent.basisLabel(analysis.chartBasis)} · ${window.StockAgent.phaseLabel(analysis.chartBasis)}`;
     time.append(basis);
     const verdict = document.createElement("span");
     verdict.className = "history-verdict";

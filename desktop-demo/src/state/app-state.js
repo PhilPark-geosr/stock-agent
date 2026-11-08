@@ -22,6 +22,31 @@ function basisLabel(basis) {
     : "가격 기준 거래일 미확인";
 }
 
+function phaseLabel(basis) {
+  switch (basis?.collection_phase) {
+    case "during_session": return "장중 기준";
+    case "after_session": return "정규장 종료 후 수집";
+    case "boundary": return "장 마감 경계에서 수집";
+    default: return "수집 시점 상태 미확인";
+  }
+}
+
+function phaseExplanation(basis) {
+  if (basis?.collection_phase === "after_session") return "공급자의 마감 가격 반영은 확인되지 않았습니다.";
+  if (basis?.collection_phase === "during_session") return "당시 정규장 중 수집한 값으로, 마감 가격이 아닙니다.";
+  if (basis?.collection_phase === "boundary") return "요청 도중 정규장이 종료되어 장중·장후 값을 구분할 수 없습니다.";
+  const reasons = {
+    calendar_out_of_range: "이 거래일은 지원하는 거래소 일정 범위 밖입니다.",
+    calendar_unavailable: "거래소 일정을 확인하지 못했습니다.",
+    not_a_trading_session: "일봉의 날짜가 거래소 휴장일과 일치해 확인이 필요합니다.",
+    before_session_open: "해당 일봉의 정규장 시작 전 수집되어 확인이 필요합니다.",
+    market_timezone_mismatch: "거래소와 데이터의 시간대가 일치하지 않습니다.",
+    unsupported_or_missing_market: "거래소 정보가 없거나 지원하지 않는 시장·상품입니다.",
+    invalid_collection_window: "수집 시각의 순서가 맞지 않아 상태를 판단하지 않았습니다."
+  };
+  return reasons[basis?.phase_reason] || "거래일 또는 당시 수집 시각의 근거가 없습니다.";
+}
+
 const asNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
@@ -104,7 +129,9 @@ function selectedStockView() {
     matchedAlerts: [],
     dataTime: basisLabel(analysis.chartBasis),
     priceLabel: analysis.chartBasis?.interval === "1d" ? "일봉 기준 가격" : "분석 기준 가격",
-    finalityLabel: analysis.chartBasis?.interval === "1d" ? "마감 확정 여부 미확인" : "",
+    phaseLabel: phaseLabel(analysis.chartBasis),
+    finalityLabel: phaseExplanation(analysis.chartBasis),
+    collectedTime: analysis.chartBasis?.collected_at ? `가격 수집 완료 ${formatDate(analysis.chartBasis.collected_at)}` : "",
     analyses: state.analysisHistory
   };
 }
@@ -117,6 +144,8 @@ window.StockAgent = {
   normalizeAnalysis,
   normalizeHistoryItem,
   basisLabel,
+  phaseLabel,
+  phaseExplanation,
   selectedStockView
 };
 })();

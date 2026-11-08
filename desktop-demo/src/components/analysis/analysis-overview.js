@@ -14,7 +14,7 @@ function AnalysisOverview() {
       <section class="status-strip">
         <article class="status-card"><span>선택 종목</span><strong id="selected-symbol"></strong><small id="selected-name"></small></article>
         <article class="status-card"><span>수동 분석</span><strong id="scheduler-status">대기</strong><small>POST /stocks/{symbol}/analysis</small></article>
-        <article class="status-card"><span>가격 기준</span><strong id="data-time"></strong><small id="basis-finality"></small></article>
+        <article class="status-card"><span>가격 기준</span><strong id="data-time"></strong><small id="basis-finality"></small><small id="basis-collected"></small></article>
         <article class="status-card"><span>알림</span><strong id="alert-status"></strong><small id="alert-detail"></small></article>
       </section>
       <section id="latest-analysis-section" class="analysis-card card">
@@ -66,8 +66,9 @@ function renderAnalysis(stock, analysis) {
   document.querySelector("#matched-alerts").textContent = stock.matchedAlerts.length ? `${stock.matchedAlerts.length}개` : "없음";
   document.querySelector("#data-time").textContent = stock.dataTime;
   document.querySelector("#basis-price-label").textContent = stock.priceLabel;
-  document.querySelector("#price-basis").textContent = stock.dataTime;
+  document.querySelector("#price-basis").textContent = `${stock.dataTime} · ${stock.phaseLabel}`;
   document.querySelector("#basis-finality").textContent = stock.finalityLabel;
+  document.querySelector("#basis-collected").textContent = stock.collectedTime;
   renderList("#reason-list", analysis.reasons);
   renderList("#risk-list", analysis.risks);
 }

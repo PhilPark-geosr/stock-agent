@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import math
+import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from app.domain.analysis_time import ChartBasis
+from app.integrations.analysis_calendar import AnalysisSessionCalendar
 from app.interfaces.market_data import MarketDataError, MarketDataProvider
 from app.schemas import MarketDataSnapshot, MarketIndicators, OHLCVRecord
+from app.services.analysis_time import AnalysisTimeResolver
+
+logger = logging.getLogger(__name__)
 
 
 class YFinanceMarketDataProvider(MarketDataProvider):
@@ -20,10 +25,14 @@ class YFinanceMarketDataProvider(MarketDataProvider):
         period: str = "3mo",
         interval: str = "1d",
         max_records: int = 60,
+        clock: Callable[[], datetime] | None = None,
+        time_resolver: AnalysisTimeResolver | None = None,
     ) -> None:
         self.period = period
         self.interval = interval
         self.max_records = max_records
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.time_resolver = time_resolver or AnalysisTimeResolver(AnalysisSessionCalendar())
 
     def fetch(self, symbol: str) -> MarketDataSnapshot:
         try:
@@ -33,12 +42,15 @@ class YFinanceMarketDataProvider(MarketDataProvider):
 
         ticker = yf.Ticker(symbol)
         try:
+            started_at = self.clock()
             history = ticker.history(
                 period=self.period,
                 interval=self.interval,
                 auto_adjust=False,
                 actions=False,
+                prepost=False,
             )
+            collected_at = self.clock()
         except Exception as exc:
             raise MarketDataError(f"failed to fetch yfinance history for {symbol}") from exc
 
@@ -71,12 +83,24 @@ class YFinanceMarketDataProvider(MarketDataProvider):
             raise MarketDataError(f"market data for {symbol} has no recent records")
 
         data_time = records[-1].time
+        basis = _chart_basis(clean_history.index[-1], self.interval)
+        metadata = {}
+        if self.interval == "1d" and basis.session_date is not None:
+            try:
+                # Public API may issue a separate metadata request. It is not
+                # part of the already completed OHLC collection window.
+                metadata = ticker.get_history_metadata()
+            except Exception:
+                logger.warning("Analysis market metadata unavailable symbol=%s", symbol)
+        basis = self.time_resolver.resolve(
+            basis, metadata if isinstance(metadata, dict) else {}, started_at, collected_at,
+        )
         return MarketDataSnapshot(
             symbol=symbol,
             data_time=data_time,
             records=records,
             indicators=_build_indicators(clean_history),
-            chart_basis=_chart_basis(clean_history.index[-1], self.interval),
+            chart_basis=basis,
         )
 
 

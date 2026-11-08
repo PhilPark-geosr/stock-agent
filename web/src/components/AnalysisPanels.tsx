@@ -14,6 +14,31 @@ function basisLabel(basis?: ChartBasis | null): string {
   return `${basis.session_date} 일봉 기준 · 시장 현지일`;
 }
 
+function phaseLabel(basis?: ChartBasis | null): string {
+  switch (basis?.collection_phase) {
+    case 'during_session': return '장중 기준';
+    case 'after_session': return '정규장 종료 후 수집';
+    case 'boundary': return '장 마감 경계에서 수집';
+    default: return '수집 시점 상태 미확인';
+  }
+}
+
+function phaseExplanation(basis?: ChartBasis | null): string {
+  if (basis?.collection_phase === 'after_session') return '공급자의 마감 가격 반영은 확인되지 않았습니다.';
+  if (basis?.collection_phase === 'during_session') return '당시 정규장 중 수집한 값으로, 마감 가격이 아닙니다.';
+  if (basis?.collection_phase === 'boundary') return '요청 도중 정규장이 종료되어 장중·장후 값을 구분할 수 없습니다.';
+  switch (basis?.phase_reason) {
+    case 'calendar_out_of_range': return '이 거래일은 지원하는 거래소 일정 범위 밖입니다.';
+    case 'calendar_unavailable': return '거래소 일정을 확인하지 못했습니다.';
+    case 'not_a_trading_session': return '일봉의 날짜가 거래소 휴장일과 일치해 확인이 필요합니다.';
+    case 'before_session_open': return '해당 일봉의 정규장 시작 전 수집되어 확인이 필요합니다.';
+    case 'market_timezone_mismatch': return '거래소와 데이터의 시간대가 일치하지 않습니다.';
+    case 'unsupported_or_missing_market': return '거래소 정보가 없거나 지원하지 않는 시장·상품입니다.';
+    case 'invalid_collection_window': return '수집 시각의 순서가 맞지 않아 상태를 판단하지 않았습니다.';
+    default: return '거래일 또는 당시 수집 시각의 근거가 없습니다.';
+  }
+}
+
 function metric(value: unknown, suffix = ''): string {
   const number = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
   return Number.isFinite(number) ? `${new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 2 }).format(number)}${suffix}` : '정보 없음';
@@ -42,7 +67,9 @@ export function AnalysisPanel({ symbol, detail, latestId, loading, running, onRu
       <dl className="analysis-metrics">
         <div><dt>{detail.chart_basis?.interval === '1d' ? '일봉 기준 가격' : '분석 기준 가격'}</dt><dd>{metric(levels.latest_close, '원')}</dd>
           <dd className="chart-basis">{basisLabel(detail.chart_basis)}</dd>
-          {detail.chart_basis?.interval === '1d' && <dd className="chart-basis">마감 확정 여부 미확인</dd>}
+          <dd className="chart-basis">{phaseLabel(detail.chart_basis)}</dd>
+          <dd className="chart-basis">{phaseExplanation(detail.chart_basis)}</dd>
+          {detail.chart_basis?.collected_at && <dd className="chart-basis">가격 수집 완료 {formatDate(detail.chart_basis.collected_at)}</dd>}
         </div>
         <div><dt>분석 시점 등락률</dt><dd>{metric(levels.change_percent, '%')}</dd></div>
         <div><dt>20일 평균 대비 거래량</dt><dd>{metric(levels.volume_ratio_20, '배')}</dd></div>
@@ -78,7 +105,7 @@ export function AnalysisHistoryPanel({ symbol, items, selectedId, loading, detai
     {error && <p className="notice error">{error}</p>}
     {!symbol ? <p className="empty-state">관심 종목을 선택하면 분석 이력을 볼 수 있습니다.</p> : loading && items.length === 0 ? <p className="loading" role="status">분석 이력을 불러오는 중…</p> : items.length === 0 ? (!error && <p className="empty-state">저장된 분석 이력이 없습니다.</p>) : <ul className="history-list" aria-label={`${symbol} 저장된 분석 이력`}>
       {items.map(item => <li key={item.id}><button type="button" onClick={() => onSelect(item)} aria-current={selectedId === item.id ? 'true' : undefined}>
-        <span>분석 기록 {formatDate(item.analyzed_at)}</span><small>{basisLabel(item.chart_basis)}</small><strong>{item.overall_judgment}</strong><small>{item.summary}</small>
+        <span>분석 기록 {formatDate(item.analyzed_at)}</span><small>{basisLabel(item.chart_basis)}</small><small>{phaseLabel(item.chart_basis)}</small><strong>{item.overall_judgment}</strong><small>{item.summary}</small>
       </button></li>)}
     </ul>}
     {detailLoading !== null && <p className="loading" role="status">분석 상세를 불러오는 중…</p>}

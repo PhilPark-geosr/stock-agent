@@ -55,3 +55,20 @@ test("a late history response cannot replace the selected result and its basis",
   assert.equal(app.state.selectedAnalysis.id, 2);
   assert.equal(app.state.selectedAnalysis.chartBasis.session_date, "2026-11-06");
 });
+
+for (const [phase, label] of [["during_session", "장중 기준"], ["after_session", "정규장 종료 후 수집"], ["boundary", "장 마감 경계에서 수집"]]) {
+  test(`saved ${phase} has the same meaning in detail and history`, () => {
+    const app = loadState();
+    const row = { id: 1, chart_basis: { interval: "1d", session_date: "2026-11-06", collection_phase: phase, collected_at: "2026-11-06T06:31:00Z" } };
+    app.state.selectedAnalysis = app.normalizeAnalysis(row);
+    assert.equal(app.selectedStockView().phaseLabel, label);
+    assert.equal(app.phaseLabel(app.normalizeHistoryItem(row).chartBasis), label);
+    assert.match(app.selectedStockView().collectedTime, /가격 수집 완료.*KST/);
+    if (phase === "after_session") assert.match(app.selectedStockView().finalityLabel, /마감 가격 반영은 확인되지/);
+  });
+}
+
+test("unknown phase explains a missing exchange calendar", () => {
+  const app = loadState();
+  assert.equal(app.phaseExplanation({ phase_reason: "calendar_unavailable" }), "거래소 일정을 확인하지 못했습니다.");
+});
