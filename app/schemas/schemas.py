@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.domain.analysis_time import ChartBasis
 
 
 class OHLCVRecord(BaseModel):
@@ -44,6 +46,7 @@ class MarketDataSnapshot(BaseModel):
     data_time: datetime
     records: List[OHLCVRecord] = Field(default_factory=list)
     indicators: MarketIndicators = Field(default_factory=MarketIndicators)
+    chart_basis: ChartBasis | None = None
 
 
 class AnalysisRequest(BaseModel):
@@ -161,13 +164,29 @@ class AlertConditionRejected(BaseModel):
     rewrite_guidance: str
 
 
-class AnalysisResultRead(BaseModel):
+class AnalysisTimeRead(BaseModel):
+    """Expose server-recorded UTC instants explicitly, including SQLite rows."""
+
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    symbol: str
     analyzed_at: datetime
     data_timestamp: Optional[datetime]
+    chart_basis: ChartBasis | None = None
+
+    @field_validator("analyzed_at", "data_timestamp")
+    @classmethod
+    def explicit_utc(cls, value: datetime | None) -> datetime | None:
+        # These existing database fields are written in UTC. SQLite drops tzinfo.
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+
+class AnalysisResultRead(AnalysisTimeRead):
+    id: int
+    symbol: str
     overall_judgment: str
     summary: str
     key_reasons: List[str]
@@ -180,15 +199,11 @@ class AnalysisResultRead(BaseModel):
     shared_safe: bool
 
 
-class AnalysisResultHistoryItem(BaseModel):
+class AnalysisResultHistoryItem(AnalysisTimeRead):
     """Lightweight row for analysis history listings."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: int
     symbol: str
-    analyzed_at: datetime
-    data_timestamp: Optional[datetime]
     overall_judgment: str
     summary: str
     should_alert: bool

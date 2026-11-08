@@ -191,6 +191,7 @@ h1 { margin: 0; font-size: 27px; letter-spacing: -.6px; }
 .price-block span { color: #7f8f89; font-size: 10px; font-weight: 800; }
 .price-block strong { display: block; margin-top: 8px; font-size: 28px; }
 .price-block em { display: block; margin-top: 5px; font-size: 12px; font-style: normal; font-weight: 800; }
+.price-block small { display: block; max-width: 240px; margin-top: 6px; font-size: 11px; line-height: 1.5; }
 .positive { color: #d34b4b; }
 .negative { color: #33795f; }
 

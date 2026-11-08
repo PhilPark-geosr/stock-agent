@@ -4,8 +4,10 @@ from typing import Any
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column
+from pydantic import ValidationError
 
 from app.core.database import Base
+from app.domain.analysis_time import ChartBasis
 from app.domain import briefing_records  # noqa: F401 — register briefing metadata
 from app.domain import catalog  # noqa: F401 — register catalog metadata
 
@@ -118,6 +120,19 @@ class AnalysisResult(Base):
     alert_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     shared_safe: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    @property
+    def chart_basis(self) -> ChartBasis | None:
+        # Old results remain readable without guessing from their timestamps.
+        if not isinstance(self.raw_result, dict):
+            return None
+        basis = self.raw_result.get("_chart_basis_v1")
+        if basis is None:
+            return None
+        try:
+            return ChartBasis.model_validate(basis)
+        except ValidationError:
+            return None
 
 class NotificationConnectionRecord(Base):
     __tablename__ = "notification_connections"

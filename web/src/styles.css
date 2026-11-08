@@ -173,6 +173,7 @@ h2 { margin: 0; font: 500 30px/1.1 Georgia, "Times New Roman", serif; letter-spa
 .analysis-metrics div { padding: 13px; border: 1px solid rgba(255,255,255,.22); }
 .analysis-metrics dt { color: #bfd0c8; font-size: 12px; }
 .analysis-metrics dd { margin: 8px 0 0; font-size: 20px; font-weight: 700; }
+.analysis-metrics dd.chart-basis { font-size: 12px; font-weight: 400; line-height: 1.6; }
 .analysis-time { color: #bfd0c8; font-size: 13px; }
 .system-signal { margin-top: 22px; padding: 14px; background: rgba(255,255,255,.1); }
 .system-signal h4 { margin-top: 0; }
