@@ -21,11 +21,19 @@ export interface AnalysisHistoryItem {
   symbol: string;
   analyzed_at: string;
   data_timestamp: string | null;
+  chart_basis?: ChartBasis | null;
   overall_judgment: string;
   summary: string;
   should_alert: boolean;
   triggered_alerts: string[];
   shared_safe: boolean;
+}
+
+export interface ChartBasis {
+  interval: string;
+  session_date: string | null;
+  source_timezone: string | null;
+  finality: 'unknown';
 }
 
 export interface AnalysisResult extends AnalysisHistoryItem {

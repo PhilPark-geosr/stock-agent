@@ -4,13 +4,23 @@ const state = {
   selectedSymbol: null,
   selectedAnalysis: null,
   analysisHistory: [],
+  analysisHistoryError: null,
   analysisDetails: new Map(),
   alertConditions: []
 };
 
-const formatDate = (value) => value
-  ? new Date(value).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false })
-  : "-";
+function formatDate(value) {
+  if (!value || !/(Z|[+-]\d{2}:\d{2})$/i.test(value)) return "기록 시각 미확인";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "기록 시각 미확인";
+  return date.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }) + " KST";
+}
+
+function basisLabel(basis) {
+  return basis?.interval === "1d" && basis.session_date
+    ? `${basis.session_date} 일봉 기준 · 시장 현지일`
+    : "가격 기준 거래일 미확인";
+}
 
 const asNumber = (value) => {
   const number = Number(value);
@@ -36,7 +46,8 @@ function emptyAnalysis(symbol = "-") {
     shouldAlert: false,
     triggeredAlerts: [],
     alertReason: "알림 조건 미확인",
-    dataTimestamp: null
+    dataTimestamp: null,
+    chartBasis: null
   };
 }
 
@@ -53,7 +64,8 @@ function normalizeAnalysis(result) {
     shouldAlert: Boolean(result.should_alert),
     triggeredAlerts: result.triggered_alerts || [],
     alertReason: result.alert_reason || "알림 조건 미충족",
-    dataTimestamp: result.data_timestamp
+    dataTimestamp: result.data_timestamp,
+    chartBasis: result.chart_basis || null
   };
 }
 
@@ -70,7 +82,8 @@ function normalizeHistoryItem(result) {
     shouldAlert: Boolean(result.should_alert),
     triggeredAlerts: result.triggered_alerts || [],
     alertReason: result.should_alert ? "알림 조건 충족" : "알림 조건 미충족",
-    dataTimestamp: result.data_timestamp
+    dataTimestamp: result.data_timestamp,
+    chartBasis: result.chart_basis || null
   };
 }
 
@@ -89,7 +102,9 @@ function selectedStockView() {
     alertStatus: "평가 중단",
     alertDetail: "사용자별 알림 평가·발송은 다음 설계 단계에서 활성화됩니다.",
     matchedAlerts: [],
-    dataTime: formatDate(analysis.dataTimestamp),
+    dataTime: basisLabel(analysis.chartBasis),
+    priceLabel: analysis.chartBasis?.interval === "1d" ? "일봉 기준 가격" : "분석 기준 가격",
+    finalityLabel: analysis.chartBasis?.interval === "1d" ? "마감 확정 여부 미확인" : "",
     analyses: state.analysisHistory
   };
 }
@@ -101,6 +116,7 @@ window.StockAgent = {
   errorMessage,
   normalizeAnalysis,
   normalizeHistoryItem,
+  basisLabel,
   selectedStockView
 };
 })();

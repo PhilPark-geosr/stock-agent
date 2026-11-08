@@ -27,6 +27,8 @@ export function BetaAppPage({ api, session, onLogout, onSessionExpired }: Props)
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [historyWarning, setHistoryWarning] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [conditionRevision, setConditionRevision] = useState(0);
   const selectedSymbolRef = useRef<string | null>(null);
   const detailRequestRef = useRef(0);
@@ -47,6 +49,8 @@ export function BetaAppPage({ api, session, onLogout, onSessionExpired }: Props)
     setHasMoreHistory(false);
     setMessage(null);
     setHistoryWarning(null);
+    setHistoryError(null);
+    setDetailError(null);
   }
 
   useEffect(() => {
@@ -79,13 +83,19 @@ export function BetaAppPage({ api, session, onLogout, onSessionExpired }: Props)
           const result = await api.analysisDetail(target, rows[0].id);
           if (active && selectedSymbolRef.current === target && detailRequestRef.current === requestId) setDetail(result);
         } catch (error) {
-          if (active && selectedSymbolRef.current === target && detailRequestRef.current === requestId) handleError(error, '최신 분석 상세를 불러오지 못했습니다.');
+          if (active && selectedSymbolRef.current === target && detailRequestRef.current === requestId) {
+            setDetailError('최신 분석 상세를 불러오지 못했습니다.');
+            handleError(error, '최신 분석 상세를 불러오지 못했습니다.');
+          }
         } finally {
           if (active && detailRequestRef.current === requestId) setDetailLoading(null);
         }
       }
     }, error => {
-      if (active && selectedSymbolRef.current === target) handleError(error, '저장된 분석 이력을 불러오지 못했습니다.');
+      if (active && selectedSymbolRef.current === target) {
+        setHistoryError('저장된 분석 이력을 불러오지 못했습니다.');
+        handleError(error, '저장된 분석 이력을 불러오지 못했습니다.');
+      }
     }).finally(() => { if (active && selectedSymbolRef.current === target) setHistoryLoading(false); });
     return () => { active = false; };
   }, [api, selectedSymbol]);
@@ -110,12 +120,16 @@ export function BetaAppPage({ api, session, onLogout, onSessionExpired }: Props)
     const target = selectedSymbol;
     const requestId = ++detailRequestRef.current;
     setDetailLoading(item.id);
+    setDetailError(null);
     setMessage(null);
     try {
       const result = await api.analysisDetail(target, item.id);
       if (selectedSymbolRef.current === target && detailRequestRef.current === requestId) setDetail(result);
     } catch (error) {
-      if (selectedSymbolRef.current === target && detailRequestRef.current === requestId) handleError(error, '분석 상세를 불러오지 못했습니다.');
+      if (selectedSymbolRef.current === target && detailRequestRef.current === requestId) {
+        setDetailError('요청한 분석 상세를 불러오지 못했습니다. 표시 중인 결과는 이전에 열었던 분석입니다.');
+        handleError(error, '분석 상세를 불러오지 못했습니다.');
+      }
     } finally { if (detailRequestRef.current === requestId) setDetailLoading(null); }
   }
 
@@ -137,6 +151,8 @@ export function BetaAppPage({ api, session, onLogout, onSessionExpired }: Props)
     if (selectedSymbolRef.current === target) {
       detailRequestRef.current += 1;
       setDetail(result);
+      setDetailError(null);
+      setHistoryError(null);
       setDetailLoading(null);
       setHistory(current => [result, ...current.filter(item => item.id !== result.id)]);
       setMessage(`${target} 공통 분석이 저장되었습니다.`);
@@ -188,8 +204,8 @@ export function BetaAppPage({ api, session, onLogout, onSessionExpired }: Props)
     {message && <p className={message.includes('저장되었습니다') ? 'notice' : 'notice error'} role={message.includes('저장되었습니다') ? 'status' : 'alert'}>{message}</p>}
     {historyWarning && <p className="notice error" role="alert">{historyWarning}</p>}
     <div id="watchlist-area"><WatchlistPanel items={items} selectedSymbol={selectedSymbol} loading={loading} adding={adding} removing={removing} onAdd={addWatchlist} onSelect={chooseSymbol} onRemove={removeWatchlist} /></div>
-    <div id="analysis-area"><AnalysisPanel symbol={selectedSymbol} detail={detail} latestId={history[0]?.id ?? null} loading={historyLoading || detailLoading !== null} running={running} onRun={runAnalysis} /></div>
-    <div id="history-area"><AnalysisHistoryPanel symbol={selectedSymbol} items={history} selectedId={detail?.id ?? null} loading={historyLoading} detailLoading={detailLoading} hasMore={hasMoreHistory} onSelect={showDetail} onLatest={() => { if (history[0]) showDetail(history[0]); }} onMore={loadMoreHistory} /></div>
+    <div id="analysis-area"><AnalysisPanel symbol={selectedSymbol} detail={detail} latestId={history[0]?.id ?? null} loading={historyLoading || detailLoading !== null} running={running} onRun={runAnalysis} error={detailError || historyError} /></div>
+    <div id="history-area"><AnalysisHistoryPanel symbol={selectedSymbol} items={history} selectedId={detail?.id ?? null} loading={historyLoading} detailLoading={detailLoading} hasMore={hasMoreHistory} onSelect={showDetail} onLatest={() => { if (history[0]) showDetail(history[0]); }} onMore={loadMoreHistory} error={historyError} /></div>
     <div id="conditions-area"><AlertConditionsPanel key={conditionRevision} api={api} selectedSymbol={selectedSymbol} onSessionExpired={onSessionExpired} /></div>
     <div id="notification-area">
       <NotificationConnectionPanel api={api} onSessionExpired={onSessionExpired}>

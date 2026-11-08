@@ -6,6 +6,7 @@ import math
 from datetime import datetime, timezone
 from typing import Any
 
+from app.domain.analysis_time import ChartBasis
 from app.interfaces.market_data import MarketDataError, MarketDataProvider
 from app.schemas import MarketDataSnapshot, MarketIndicators, OHLCVRecord
 
@@ -75,7 +76,19 @@ class YFinanceMarketDataProvider(MarketDataProvider):
             data_time=data_time,
             records=records,
             indicators=_build_indicators(clean_history),
+            chart_basis=_chart_basis(clean_history.index[-1], self.interval),
         )
+
+
+def _chart_basis(index_value: Any, interval: str) -> ChartBasis:
+    local_time = index_value.to_pydatetime() if hasattr(index_value, "to_pydatetime") else index_value
+    if not isinstance(local_time, datetime) or local_time.utcoffset() is None:
+        return ChartBasis(interval=interval)
+    return ChartBasis(
+        interval=interval,
+        session_date=local_time.date() if interval == "1d" else None,
+        source_timezone=str(local_time.tzinfo),
+    )
 
 
 def _build_indicators(history: Any) -> MarketIndicators:

@@ -16,8 +16,12 @@ function analysisFailureDialog(error) {
 }
 
 function createAnalysisController({ backend, renderScreen, showToast, showDialog, showView }) {
+  let detailRequest = 0;
+
   function applySelectedAnalysis(symbol, analysisResult, historyResult) {
     if (state.selectedSymbol !== symbol) return false;
+    detailRequest += 1;
+    state.analysisHistoryError = null;
     const analysis = normalizeAnalysis(analysisResult);
     state.analysisDetails.set(analysis.id, analysis);
     state.selectedAnalysis = analysis;
@@ -35,18 +39,24 @@ function createAnalysisController({ backend, renderScreen, showToast, showDialog
   async function loadSelectedAnalysis() {
     const symbol = state.selectedSymbol;
     if (!symbol) return;
+    const request = ++detailRequest;
+    state.analysisHistoryError = null;
     document.querySelector("#scheduler-status").textContent = "데이터 조회 중";
     try {
       const [latestResult, historyResult] = await Promise.all([
         backend.latestAnalysis(symbol),
         backend.analysisHistory(symbol)
       ]);
-      if (state.selectedSymbol !== symbol) return;
+      if (state.selectedSymbol !== symbol || request !== detailRequest) return;
       applySelectedAnalysis(symbol, latestResult, historyResult);
     } catch (error) {
-      if (state.selectedSymbol !== symbol) return;
+      if (state.selectedSymbol !== symbol || request !== detailRequest) return;
       state.selectedAnalysis = emptyAnalysis(symbol);
+      state.selectedAnalysis.summary = "분석 결과를 불러오지 못했습니다. 다시 조회해 주세요.";
+      state.selectedAnalysis.reasons = [];
+      state.selectedAnalysis.risks = [];
       state.analysisHistory = [];
+      state.analysisHistoryError = "분석 이력을 불러오지 못했습니다.";
       document.querySelector("#scheduler-status").textContent = "조회 실패";
       renderScreen();
       console.error("Latest analysis lookup failed", error);
@@ -55,15 +65,18 @@ function createAnalysisController({ backend, renderScreen, showToast, showDialog
   }
 
   async function selectAnalysis(analysisId) {
+    const symbol = state.selectedSymbol;
+    const request = ++detailRequest;
     const cached = state.analysisDetails.get(analysisId);
-    if (cached) {
+    if (cached && cached.symbol === symbol) {
       state.selectedAnalysis = cached;
       renderScreen();
       showView("analysis-view");
       return;
     }
     try {
-      const result = await backend.analysisById(state.selectedSymbol, analysisId);
+      const result = await backend.analysisById(symbol, analysisId);
+      if (state.selectedSymbol !== symbol || request !== detailRequest) return;
       const analysis = normalizeAnalysis(result);
       state.analysisDetails.set(analysisId, analysis);
       state.selectedAnalysis = analysis;

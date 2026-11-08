@@ -128,7 +128,14 @@ class AnalysisService:
         )
         agent_result = self.agent.analyze(market_data, alert_conditions)
         agent_result = self._validate_alert_decision(agent_result, alert_conditions)
+        # Keep the displayed price and its date tied to the exact fetched input.
+        agent_result = agent_result.model_copy(update={
+            "data_time": market_data.data_time,
+            "indicators": {**agent_result.indicators, **model_to_dict(market_data.indicators)},
+        })
         raw_result = model_to_dict(agent_result)
+        if market_data.chart_basis is not None:
+            raw_result["_chart_basis_v1"] = model_to_dict(market_data.chart_basis)
 
         return self.analysis_repository.save(
             symbol=agent_result.symbol,

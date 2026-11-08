@@ -136,7 +136,10 @@ if __name__ == "__main__":
                 should_alert=False,
                 triggered_alerts=[],
                 alert_reason=None,
-                raw_result=None,
+                raw_result={"_chart_basis_v1": {
+                    "interval": "1d", "session_date": "2026-09-25",
+                    "source_timezone": "America/New_York", "finality": "unknown",
+                }},
                 shared_safe=True,
             ),
             AnalysisResult(
