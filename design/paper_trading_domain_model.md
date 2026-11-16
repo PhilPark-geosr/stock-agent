@@ -10,6 +10,8 @@
 
 ## 다이어그램
 
+2026-11-16 후속 [가상 매도 협력](paper_trading_sell_sequence.md)에서도 수행 역할인 매도와 완료된 사실인 매도 결과를 분리했다. 아래 그림은 이 분리 전의 초기 분석 모델이며 현재 용어는 용어집과 후속 협력 문서를 따른다.
+
 [정적 이미지로 보기](paper_trading_domain_model.png)
 
 ```mermaid
